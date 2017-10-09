@@ -1,18 +1,22 @@
-/*******************************************************************************
-* Copyright 2005-2016 Intel Corporation
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/*
+    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+
+    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
+    you can redistribute it and/or modify it under the terms of the GNU General Public License
+    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
+    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See  the GNU General Public License for more details.   You should have received a copy of
+    the  GNU General Public License along with Threading Building Blocks; if not, write to the
+    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+
+    As a special exception,  you may use this file  as part of a free software library without
+    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
+    functions from this file, or you compile this file and link it with other files to produce
+    an executable,  this file does not by itself cause the resulting executable to be covered
+    by the GNU General Public License. This exception does not however invalidate any other
+    reasons why the executable file might be covered by the GNU General Public License.
+*/
 
 #ifndef __TBB_task_H
 #define __TBB_task_H
@@ -439,9 +443,9 @@ public:
         introduced in the currently unused padding areas and these fields are updated
         by inline methods. **/
     task_group_context ( kind_type relation_with_parent = bound,
-                         uintptr_t t = default_traits )
+                         uintptr_t traits = default_traits )
         : my_kind(relation_with_parent)
-        , my_version_and_traits(2 | t)
+        , my_version_and_traits(2 | traits)
     {
         init();
     }
@@ -500,9 +504,6 @@ public:
     //! Retrieves current priority of the current task group
     priority_t priority () const;
 #endif /* __TBB_TASK_PRIORITY */
-
-    //! Returns the context's trait
-    uintptr_t traits() const { return my_version_and_traits & traits_mask; }
 
 protected:
     //! Out-of-line part of the constructor.
@@ -900,11 +901,7 @@ class empty_task: public task {
 namespace internal {
     template<typename F>
     class function_task : public task {
-#if __TBB_ALLOW_MUTABLE_FUNCTORS
         F my_func;
-#else
-        const F my_func;
-#endif
         /*override*/ task* execute() {
             my_func();
             return NULL;

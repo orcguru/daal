@@ -28,7 +28,8 @@
 #include "daal_defines.h"
 #include "service_memory.h"
 
-#include "service_blas_mkl.h"
+//felix
+#include "service_openblas.h"
 
 namespace daal
 {
@@ -38,7 +39,7 @@ namespace internal
 /*
 // Template functions definition
 */
-template<typename fpType, CpuType cpu, template<typename, CpuType> class _impl=mkl::MklBlas>
+template<typename fpType, CpuType cpu, template<typename, CpuType> class _impl=ob::OpenBlas>
 struct Blas
 {
     typedef typename _impl<fpType,cpu>::SizeType SizeType;

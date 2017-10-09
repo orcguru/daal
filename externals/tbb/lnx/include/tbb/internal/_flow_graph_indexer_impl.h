@@ -1,18 +1,22 @@
-/*******************************************************************************
-* Copyright 2005-2016 Intel Corporation
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/*
+    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+
+    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
+    you can redistribute it and/or modify it under the terms of the GNU General Public License
+    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
+    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See  the GNU General Public License for more details.   You should have received a copy of
+    the  GNU General Public License along with Threading Building Blocks; if not, write to the
+    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+
+    As a special exception,  you may use this file  as part of a free software library without
+    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
+    functions from this file, or you compile this file and link it with other files to produce
+    an executable,  this file does not by itself cause the resulting executable to be covered
+    by the GNU General Public License. This exception does not however invalidate any other
+    reasons why the executable file might be covered by the GNU General Public License.
+*/
 
 #ifndef __TBB__flow_graph_indexer_impl_H
 #define __TBB__flow_graph_indexer_impl_H
@@ -45,12 +49,12 @@ namespace internal {
             tbb::flow::get<N-1>(my_input).set_up(p, indexer_node_put_task);
             indexer_helper<TupleTypes,N-1>::template set_indexer_node_pointer<IndexerNodeBaseType,PortTuple>(my_input, p);
         }
+#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         template<typename InputTuple>
         static inline void reset_inputs(InputTuple &my_input, reset_flags f) {
             indexer_helper<TupleTypes,N-1>::reset_inputs(my_input, f);
             tbb::flow::get<N-1>(my_input).reset_receiver(f);
         }
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         template<typename InputTuple>
         static inline void extract(InputTuple &my_input) {
             indexer_helper<TupleTypes,N-1>::extract(my_input);
@@ -67,11 +71,11 @@ namespace internal {
             task *(*indexer_node_put_task)(const T&, void *) = do_try_put<IndexerNodeBaseType, T, 0>;
             tbb::flow::get<0>(my_input).set_up(p, indexer_node_put_task);
         }
+#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         template<typename InputTuple>
         static inline void reset_inputs(InputTuple &my_input, reset_flags f) {
             tbb::flow::get<0>(my_input).reset_receiver(f);
         }
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         template<typename InputTuple>
         static inline void extract(InputTuple &my_input) {
             tbb::flow::get<0>(my_input).extract_receiver();
@@ -134,16 +138,16 @@ namespace internal {
             return my_try_put_task(v, my_indexer_ptr);
         }
 
-    public:
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
-        /*override*/void reset_receiver(reset_flags f) { if(f&rf_clear_edges) my_built_predecessors.clear(); }
+    public:
+        /*override*/void reset_receiver(__TBB_PFG_RESET_ARG(reset_flags f)) {
+            if(f&rf_clear_edges) my_built_predecessors.clear();
+        }
+        void extract_receiver() { my_built_predecessors.receiver_extract(*this); }
 #else
-        /*override*/void reset_receiver(reset_flags /*f*/) { }
+        /*override*/void reset_receiver(__TBB_PFG_RESET_ARG(reset_flags /*f*/)) { }
 #endif
 
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
-        void extract_receiver() { my_built_predecessors.receiver_extract(*this); }
-#endif
     };
 
     template<typename InputTuple, typename OutputType, typename StructTypes>
@@ -152,9 +156,6 @@ namespace internal {
         static const int N = tbb::flow::tuple_size<InputTuple>::value;
         typedef OutputType output_type;
         typedef InputTuple input_type;
-
-        // Some versions of Intel C++ compiler fail to generate an implicit constructor for the class which has std::tuple as a member.
-        indexer_node_FE() : my_inputs() {}
 
         input_type &input_ports() { return my_inputs; }
     protected:
@@ -187,7 +188,7 @@ namespace internal {
 #endif
         };
         enum op_stat {WAIT=0, SUCCEEDED, FAILED};
-        typedef indexer_node_base<InputTuple,output_type,StructTypes> class_type;
+        typedef indexer_node_base<InputTuple,output_type,StructTypes> my_class;
 
         class indexer_node_base_operation : public aggregated_operation<indexer_node_base_operation> {
         public:
@@ -208,9 +209,9 @@ namespace internal {
             indexer_node_base_operation(op_type t) : type(char(t)) {}
         };
 
-        typedef internal::aggregating_functor<class_type, indexer_node_base_operation> handler_type;
-        friend class internal::aggregating_functor<class_type, indexer_node_base_operation>;
-        aggregator<handler_type, indexer_node_base_operation> my_aggregator;
+        typedef internal::aggregating_functor<my_class, indexer_node_base_operation> my_handler;
+        friend class internal::aggregating_functor<my_class, indexer_node_base_operation>;
+        aggregator<my_handler, indexer_node_base_operation> my_aggregator;
 
         void handle_operations(indexer_node_base_operation* op_list) {
             indexer_node_base_operation *current;
@@ -259,13 +260,13 @@ namespace internal {
         indexer_node_base(graph& g) : graph_node(g), input_ports_type() {
             indexer_helper<StructTypes,N>::set_indexer_node_pointer(this->my_inputs, this);
             my_successors.set_owner(this);
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         indexer_node_base(const indexer_node_base& other) : graph_node(other.my_graph), input_ports_type(), sender<output_type>() {
             indexer_helper<StructTypes,N>::set_indexer_node_pointer(this->my_inputs, this);
             my_successors.set_owner(this);
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         bool register_successor(successor_type &r) {
@@ -317,11 +318,13 @@ namespace internal {
         }
 #endif /* TBB_PREVIEW_FLOW_GRAPH_FEATURES */
     protected:
-        /*override*/void reset_node(reset_flags f) {
+        /*override*/void reset_node(__TBB_PFG_RESET_ARG(reset_flags f)) {
+#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
             if(f & rf_clear_edges) {
                 my_successors.clear();
                 indexer_helper<StructTypes,N>::reset_inputs(this->my_inputs,f);
             }
+#endif
         }
 
     private:

@@ -31,6 +31,8 @@
 #include "matrix.h"
 #include "data_collection.h"
 
+//felix
+/*
 #include "adaboost_model.h"
 #include "adaboost_training_types.h"
 
@@ -59,10 +61,12 @@
 #include "implicit_als_training_init_types.h"
 
 #include "kernel_function_types.h"
+*/
 
 #include "kmeans_types.h"
 #include "kmeans_init_types.h"
 
+/*
 #include "linear_regression_ne_model.h"
 #include "linear_regression_qr_model.h"
 #include "linear_regression_types.h"
@@ -175,6 +179,7 @@
 
 #include "pooling3d/maximum_pooling3d_layer_forward_types.h"
 #include "pooling3d/maximum_pooling3d_layer_backward_types.h"
+*/
 
 namespace daal
 {
@@ -238,6 +243,8 @@ Factory::Factory()
     registerObject(new Creator<data_management::DataCollection >());
     registerObject(new Creator<data_management::KeyValueDataCollection >());
 
+//felix
+/*
     registerObject(new Creator<algorithms::adaboost::Model>());
     registerObject(new Creator<algorithms::adaboost::training::Result>());
 
@@ -276,12 +283,14 @@ Factory::Factory()
     registerObject(new Creator<algorithms::implicit_als::training::DistributedPartialResultStep4>());
 
     registerObject(new Creator<algorithms::kernel_function::Result>());
+*/
 
     registerObject(new Creator<algorithms::kmeans::PartialResult>());
     registerObject(new Creator<algorithms::kmeans::Result>());
     registerObject(new Creator<algorithms::kmeans::init::PartialResult>());
     registerObject(new Creator<algorithms::kmeans::init::Result>());
 
+/*
     registerObject(new Creator<algorithms::linear_regression::ModelNormEq>());
     registerObject(new Creator<algorithms::linear_regression::ModelQR    >());
     registerObject(new Creator<algorithms::linear_regression::training::PartialResult>());
@@ -404,6 +413,7 @@ Factory::Factory()
 
     registerObject(new Creator<algorithms::neural_networks::layers::maximum_pooling3d::forward::Result>());
     registerObject(new Creator<algorithms::neural_networks::layers::maximum_pooling3d::backward::Result>());
+*/
 }
 
 Factory::~Factory()

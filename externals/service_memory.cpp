@@ -23,15 +23,16 @@
 
 #include "mkl_daal.h"
 #include "service_memory.h"
+#include <string.h>
 
 void *daal::services::daal_malloc(size_t size, size_t alignment)
 {
-    return fpk_serv_malloc(size, alignment);
+    return malloc(size);
 }
 
 void daal::services::daal_free(void *ptr)
 {
-    fpk_serv_free(ptr);
+    free(ptr);
 }
 
 void daal::services::daal_memcpy_s(void *dest, size_t destSize, const void *src, size_t srcSize)
@@ -48,10 +49,10 @@ void daal::services::daal_memcpy_s(void *dest, size_t destSize, const void *src,
     char* srcChar = (char*)src;
     for(size_t i = 0; i < nBlocks; i++)
     {
-        fpk_serv_memcpy_s(&dstChar[i * BLOCKSIZE], BLOCKSIZE, &srcChar[i * BLOCKSIZE], BLOCKSIZE);
+        memcpy(&dstChar[i * BLOCKSIZE], &srcChar[i * BLOCKSIZE], BLOCKSIZE);
     }
     if(sizeOfLastBlock != 0)
     {
-        fpk_serv_memcpy_s(&dstChar[nBlocks * BLOCKSIZE], sizeOfLastBlock, &srcChar[nBlocks * BLOCKSIZE], sizeOfLastBlock);
+        memcpy(&dstChar[nBlocks * BLOCKSIZE], &srcChar[nBlocks * BLOCKSIZE], sizeOfLastBlock);
     }
 }

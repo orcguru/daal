@@ -1,18 +1,22 @@
-/*******************************************************************************
-* Copyright 2005-2016 Intel Corporation
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/*
+    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+
+    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
+    you can redistribute it and/or modify it under the terms of the GNU General Public License
+    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
+    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See  the GNU General Public License for more details.   You should have received a copy of
+    the  GNU General Public License along with Threading Building Blocks; if not, write to the
+    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+
+    As a special exception,  you may use this file  as part of a free software library without
+    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
+    functions from this file, or you compile this file and link it with other files to produce
+    an executable,  this file does not by itself cause the resulting executable to be covered
+    by the GNU General Public License. This exception does not however invalidate any other
+    reasons why the executable file might be covered by the GNU General Public License.
+*/
 
 #ifndef __TBB__flow_graph_join_impl_H
 #define __TBB__flow_graph_join_impl_H
@@ -21,27 +25,24 @@
 #error Do not #include this internal file directly; use public TBB headers instead.
 #endif
 
+#include "_flow_graph_types_impl.h"
+
 namespace internal {
 
+    typedef size_t tag_value;
+    static const tag_value NO_TAG = tag_value(-1);
+
     struct forwarding_base {
-        forwarding_base(graph &g) : graph_pointer(&g) {}
+        forwarding_base(graph &g) : my_graph_ptr(&g), current_tag(NO_TAG) {}
         virtual ~forwarding_base() {}
         // decrement_port_count may create a forwarding task.  If we cannot handle the task
         // ourselves, ask decrement_port_count to deal with it.
         virtual task * decrement_port_count(bool handle_task) = 0;
         virtual void increment_port_count() = 0;
+        virtual task * increment_tag_count(tag_value /*t*/, bool /*handle_task*/) {return NULL;}
         // moved here so input ports can queue tasks
-        graph* graph_pointer;
-    };
-
-    // specialization that lets us keep a copy of the current_key for building results.
-    // KeyType can be a reference type.
-    template<typename KeyType>
-    struct matching_forwarding_base :public forwarding_base {
-        typedef typename tbb::internal::strip<KeyType>::type current_key_type;
-        matching_forwarding_base(graph &g) : forwarding_base(g) { }
-        virtual task * increment_key_count(current_key_type const & /*t*/, bool /*handle_task*/) = 0; // {return NULL;}
-        current_key_type current_key; // so ports can refer to FE's desired items
+        graph* my_graph_ptr;
+        tag_value current_tag; // so ports can refer to FE's desired items
     };
 
     template< int N >
@@ -101,25 +102,27 @@ namespace internal {
             reset_my_port(my_input);
         }
 
-        template<typename InputTuple, typename KeyFuncTuple>
-        static inline void set_key_functors(InputTuple &my_input, KeyFuncTuple &my_key_funcs) {
-            tbb::flow::get<N-1>(my_input).set_my_key_func(tbb::flow::get<N-1>(my_key_funcs));
-            tbb::flow::get<N-1>(my_key_funcs) = NULL;
-            join_helper<N-1>::set_key_functors(my_input, my_key_funcs);
+        template<typename InputTuple, typename TagFuncTuple>
+        static inline void set_tag_func(InputTuple &my_input, TagFuncTuple &my_tag_funcs) {
+            tbb::flow::get<N-1>(my_input).set_my_original_tag_func(tbb::flow::get<N-1>(my_tag_funcs));
+            tbb::flow::get<N-1>(my_input).set_my_tag_func(tbb::flow::get<N-1>(my_input).my_original_func()->clone());
+            tbb::flow::get<N-1>(my_tag_funcs) = NULL;
+            join_helper<N-1>::set_tag_func(my_input, my_tag_funcs);
         }
 
-        template< typename KeyFuncTuple>
-        static inline void copy_key_functors(KeyFuncTuple &my_inputs, KeyFuncTuple &other_inputs) {
-            if(tbb::flow::get<N-1>(other_inputs).get_my_key_func()) {
-                tbb::flow::get<N-1>(my_inputs).set_my_key_func(tbb::flow::get<N-1>(other_inputs).get_my_key_func()->clone());
+        template< typename TagFuncTuple1, typename TagFuncTuple2>
+        static inline void copy_tag_functors(TagFuncTuple1 &my_inputs, TagFuncTuple2 &other_inputs) {
+            if(tbb::flow::get<N-1>(other_inputs).my_original_func()) {
+                tbb::flow::get<N-1>(my_inputs).set_my_tag_func(tbb::flow::get<N-1>(other_inputs).my_original_func()->clone());
+                tbb::flow::get<N-1>(my_inputs).set_my_original_tag_func(tbb::flow::get<N-1>(other_inputs).my_original_func()->clone());
             }
-            join_helper<N-1>::copy_key_functors(my_inputs, other_inputs);
+            join_helper<N-1>::copy_tag_functors(my_inputs, other_inputs);
         }
 
         template<typename InputTuple>
-        static inline void reset_inputs(InputTuple &my_input, reset_flags f) {
-            join_helper<N-1>::reset_inputs(my_input, f);
-            tbb::flow::get<N-1>(my_input).reset_receiver(f);
+        static inline void reset_inputs(InputTuple &my_input __TBB_PFG_RESET_ARG(__TBB_COMMA reset_flags f)) {
+            join_helper<N-1>::reset_inputs(my_input __TBB_PFG_RESET_ARG(__TBB_COMMA f));
+            tbb::flow::get<N-1>(my_input).reset_receiver(__TBB_PFG_RESET_ARG(f));
         }
 
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
@@ -179,21 +182,23 @@ namespace internal {
             reset_my_port(my_input);
         }
 
-        template<typename InputTuple, typename KeyFuncTuple>
-        static inline void set_key_functors(InputTuple &my_input, KeyFuncTuple &my_key_funcs) {
-            tbb::flow::get<0>(my_input).set_my_key_func(tbb::flow::get<0>(my_key_funcs));
-            tbb::flow::get<0>(my_key_funcs) = NULL;
+        template<typename InputTuple, typename TagFuncTuple>
+        static inline void set_tag_func(InputTuple &my_input, TagFuncTuple &my_tag_funcs) {
+            tbb::flow::get<0>(my_input).set_my_original_tag_func(tbb::flow::get<0>(my_tag_funcs));
+            tbb::flow::get<0>(my_input).set_my_tag_func(tbb::flow::get<0>(my_input).my_original_func()->clone());
+            tbb::flow::get<0>(my_tag_funcs) = NULL;
         }
 
-        template< typename KeyFuncTuple>
-        static inline void copy_key_functors(KeyFuncTuple &my_inputs, KeyFuncTuple &other_inputs) {
-            if(tbb::flow::get<0>(other_inputs).get_my_key_func()) {
-                tbb::flow::get<0>(my_inputs).set_my_key_func(tbb::flow::get<0>(other_inputs).get_my_key_func()->clone());
+        template< typename TagFuncTuple1, typename TagFuncTuple2>
+        static inline void copy_tag_functors(TagFuncTuple1 &my_inputs, TagFuncTuple2 &other_inputs) {
+            if(tbb::flow::get<0>(other_inputs).my_original_func()) {
+                tbb::flow::get<0>(my_inputs).set_my_tag_func(tbb::flow::get<0>(other_inputs).my_original_func()->clone());
+                tbb::flow::get<0>(my_inputs).set_my_original_tag_func(tbb::flow::get<0>(other_inputs).my_original_func()->clone());
             }
         }
         template<typename InputTuple>
-        static inline void reset_inputs(InputTuple &my_input, reset_flags f) {
-            tbb::flow::get<0>(my_input).reset_receiver(f);
+        static inline void reset_inputs(InputTuple &my_input __TBB_PFG_RESET_ARG(__TBB_COMMA reset_flags f)) {
+            tbb::flow::get<0>(my_input).reset_receiver(__TBB_PFG_RESET_ARG(f));
         }
 
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
@@ -222,7 +227,7 @@ namespace internal {
 #endif
         };
         enum op_stat {WAIT=0, SUCCEEDED, FAILED};
-        typedef reserving_port<T> class_type;
+        typedef reserving_port<T> my_class;
 
         class reserving_port_operation : public aggregated_operation<reserving_port_operation> {
         public:
@@ -242,9 +247,9 @@ namespace internal {
             reserving_port_operation(op_type t) : type(char(t)) {}
         };
 
-        typedef internal::aggregating_functor<class_type, reserving_port_operation> handler_type;
-        friend class internal::aggregating_functor<class_type, reserving_port_operation>;
-        aggregator<handler_type, reserving_port_operation> my_aggregator;
+        typedef internal::aggregating_functor<my_class, reserving_port_operation> my_handler;
+        friend class internal::aggregating_functor<my_class, reserving_port_operation>;
+        aggregator<my_handler, reserving_port_operation> my_aggregator;
 
         void handle_operations(reserving_port_operation* op_list) {
             reserving_port_operation *current;
@@ -326,7 +331,7 @@ namespace internal {
         reserving_port() : reserved(false) {
             my_join = NULL;
             my_predecessors.set_owner( this );
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         // copy constructor
@@ -334,7 +339,7 @@ namespace internal {
             reserved = false;
             my_join = NULL;
             my_predecessors.set_owner( this );
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         void set_join_node_pointer(forwarding_base *join) {
@@ -404,12 +409,16 @@ namespace internal {
 
 #endif  /* TBB_PREVIEW_FLOW_GRAPH_FEATURES */
 
-        /*override*/void reset_receiver( reset_flags f) {
+        /*override*/void reset_receiver( __TBB_PFG_RESET_ARG(reset_flags f)) {
+#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
             if(f & rf_clear_edges) my_predecessors.clear();
             else
+#endif
             my_predecessors.reset();
             reserved = false;
+#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
             __TBB_ASSERT(!(f&rf_clear_edges) || my_predecessors.empty(), "port edges not removed");
+#endif
         }
 
     private:
@@ -424,7 +433,7 @@ namespace internal {
     public:
         typedef T input_type;
         typedef sender<T> predecessor_type;
-        typedef queueing_port<T> class_type;
+        typedef queueing_port<T> my_node_type;
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         typedef typename receiver<input_type>::built_predecessors_type built_predecessors_type;
         typedef typename receiver<input_type>::predecessor_list_type predecessor_list_type;
@@ -434,10 +443,11 @@ namespace internal {
     private:
         enum op_type { get__item, res_port, try__put_task
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
-            , add_blt_pred, del_blt_pred, blt_pred_cnt, blt_pred_cpy
+            , add_blt_pred, del_blt_pred, blt_pred_cnt, blt_pred_cpy 
 #endif
         };
         enum op_stat {WAIT=0, SUCCEEDED, FAILED};
+        typedef queueing_port<T> my_class;
 
         class queueing_port_operation : public aggregated_operation<queueing_port_operation> {
         public:
@@ -466,9 +476,9 @@ namespace internal {
             {}
         };
 
-        typedef internal::aggregating_functor<class_type, queueing_port_operation> handler_type;
-        friend class internal::aggregating_functor<class_type, queueing_port_operation>;
-        aggregator<handler_type, queueing_port_operation> my_aggregator;
+        typedef internal::aggregating_functor<my_class, queueing_port_operation> my_handler;
+        friend class internal::aggregating_functor<my_class, queueing_port_operation>;
+        aggregator<my_handler, queueing_port_operation> my_aggregator;
 
         void handle_operations(queueing_port_operation* op_list) {
             queueing_port_operation *current;
@@ -545,13 +555,13 @@ namespace internal {
         //! Constructor
         queueing_port() : item_buffer<T>() {
             my_join = NULL;
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         //! copy constructor
         queueing_port(const queueing_port& /* other */) : receiver<T>(), item_buffer<T>() {
             my_join = NULL;
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         //! record parent for tallying available items
@@ -604,16 +614,15 @@ namespace internal {
             item_buffer<T>::reset(); 
             my_built_predecessors.receiver_extract(*this);
         }
-#endif  /* TBB_PREVIEW_FLOW_GRAPH_FEATURES */
 
-        /*override*/void reset_receiver(reset_flags f) { 
-            tbb::internal::suppress_unused_warning(f);
+        /*override*/void reset_receiver(__TBB_PFG_RESET_ARG(reset_flags f)) { 
             item_buffer<T>::reset(); 
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
             if (f & rf_clear_edges)
                 my_built_predecessors.clear();
-#endif
         }
+#else
+        /*override*/void reset_receiver(__TBB_PFG_RESET_ARG(reset_flags /*f*/)) { item_buffer<T>::reset(); }
+#endif  /* TBB_PREVIEW_FLOW_GRAPH_FEATURES */
 
     private:
         forwarding_base *my_join;
@@ -624,37 +633,14 @@ namespace internal {
 
 #include "_flow_graph_tagged_buffer_impl.h"
 
-    template<typename K>
-    struct count_element {
-        K my_key;
-        size_t my_value;
-    };
-
-    // method to access the key in the counting table
-    // the ref has already been removed from K
-    template< typename K >
-    struct key_to_count_functor {
-        typedef count_element<K> table_item_type;
-        const K& operator()(const table_item_type& v) { return v.my_key; }
-    };
-
-    // the ports can have only one template parameter.  We wrap the types needed in
-    // a traits type
-    template< class TraitsType >
-    class key_matching_port :
-        public receiver<typename TraitsType::T>,
-        public hash_buffer< typename TraitsType::K, typename TraitsType::T, typename TraitsType::TtoK,
-                typename TraitsType::KHash > {
+    template< typename T >
+    class tag_matching_port : public receiver<T>, public tagged_buffer< tag_value, T, NO_TAG > {
     public:
-        typedef TraitsType traits;
-        typedef key_matching_port<traits> class_type;
-        typedef typename TraitsType::T input_type;
-        typedef typename TraitsType::K key_type;
-        typedef typename tbb::internal::strip<key_type>::type noref_key_type;
-        typedef sender<input_type> predecessor_type;
-        typedef typename TraitsType::TtoK type_to_key_func_type;
-        typedef typename TraitsType::KHash hash_compare_type;
-        typedef hash_buffer< key_type, input_type, type_to_key_func_type, hash_compare_type > buffer_type;
+        typedef T input_type;
+        typedef sender<T> predecessor_type;
+        typedef tag_matching_port<T> my_node_type;  // for forwarding, if needed
+        typedef function_body<input_type, tag_value> my_tag_func_type;
+        typedef tagged_buffer<tag_value,T,NO_TAG> my_buffer_type;
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         typedef typename receiver<input_type>::built_predecessors_type built_predecessors_type;
         typedef typename receiver<input_type>::predecessor_list_type predecessor_list_type;
@@ -662,59 +648,59 @@ namespace internal {
     private:
 // ----------- Aggregator ------------
     private:
-        enum op_type { try__put, get__item, res_port
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
-           , add_blt_pred, del_blt_pred, blt_pred_cnt, blt_pred_cpy
-#endif
+        enum op_type { try__put, get__item, res_port,
+            add_blt_pred, del_blt_pred, blt_pred_cnt, blt_pred_cpy
         };
         enum op_stat {WAIT=0, SUCCEEDED, FAILED};
+        typedef tag_matching_port<T> my_class;
 
-        class key_matching_port_operation : public aggregated_operation<key_matching_port_operation> {
+        class tag_matching_port_operation : public aggregated_operation<tag_matching_port_operation> {
         public:
             char type;
-            input_type my_val;
-            input_type *my_arg;
+            T my_val;
+            T *my_arg;
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
             predecessor_type *pred;
             size_t cnt_val;
             predecessor_list_type *plist;
 #endif
+            tag_value my_tag_value;
             // constructor for value parameter
-            key_matching_port_operation(const input_type& e, op_type t) :
+            tag_matching_port_operation(const T& e, op_type t) :
                 type(char(t)), my_val(e) {}
             // constructor for pointer parameter
-            key_matching_port_operation(const input_type* p, op_type t) :
-                type(char(t)), my_arg(const_cast<input_type*>(p)) {}
+            tag_matching_port_operation(const T* p, op_type t) :
+                type(char(t)), my_arg(const_cast<T*>(p)) {}
             // constructor with no parameter
-            key_matching_port_operation(op_type t) : type(char(t)) {}
+            tag_matching_port_operation(op_type t) : type(char(t)) {}
         };
 
-        typedef internal::aggregating_functor<class_type, key_matching_port_operation> handler_type;
-        friend class internal::aggregating_functor<class_type, key_matching_port_operation>;
-        aggregator<handler_type, key_matching_port_operation> my_aggregator;
+        typedef internal::aggregating_functor<my_class, tag_matching_port_operation> my_handler;
+        friend class internal::aggregating_functor<my_class, tag_matching_port_operation>;
+        aggregator<my_handler, tag_matching_port_operation> my_aggregator;
 
-        void handle_operations(key_matching_port_operation* op_list) {
-            key_matching_port_operation *current;
+        void handle_operations(tag_matching_port_operation* op_list) {
+            tag_matching_port_operation *current;
             while(op_list) {
                 current = op_list;
                 op_list = op_list->next;
                 switch(current->type) {
                 case try__put: {
-                        bool was_inserted = this->insert_with_key(current->my_val);
+                        bool was_inserted = this->tagged_insert(current->my_tag_value, current->my_val);
                         // return failure if a duplicate insertion occurs
                         __TBB_store_with_release(current->status, was_inserted ? SUCCEEDED : FAILED);
                     }
                     break;
                 case get__item:
-                    // use current_key from FE for item
-                    if(!this->find_with_key(my_join->current_key, *(current->my_arg))) {
-                        __TBB_ASSERT(false, "Failed to find item corresponding to current_key.");
+                    // use current_tag from FE for item
+                    if(!this->tagged_find(my_join->current_tag, *(current->my_arg))) {
+                        __TBB_ASSERT(false, "Failed to find item corresponding to current_tag.");
                     }
                     __TBB_store_with_release(current->status, SUCCEEDED);
                     break;
                 case res_port:
-                    // use current_key from FE for item
-                    this->delete_with_key(my_join->current_key);
+                    // use current_tag from FE for item
+                    this->tagged_delete(my_join->current_tag);
                     __TBB_store_with_release(current->status, SUCCEEDED);
                     break;
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
@@ -743,12 +729,13 @@ namespace internal {
         template< typename R, typename B > friend class run_and_put_task;
         template<typename X, typename Y> friend class internal::broadcast_cache;
         template<typename X, typename Y> friend class internal::round_robin_cache;
-        /*override*/task *try_put_task(const input_type& v) {
-            key_matching_port_operation op_data(v, try__put);
+        /*override*/task *try_put_task(const T& v) {
+            tag_matching_port_operation op_data(v, try__put);
+            op_data.my_tag_value = (*my_tag_func)(v);
             task *rtask = NULL;
             my_aggregator.execute(&op_data);
             if(op_data.status == SUCCEEDED) {
-                rtask = my_join->increment_key_count((*(this->get_key_func()))(v), false);  // may spawn
+                rtask = my_join->increment_tag_count(op_data.my_tag_value, false);  // may spawn
                 // rtask has to reflect the return status of the try_put
                 if(!rtask) rtask = SUCCESSFULLY_ENQUEUED;
             }
@@ -757,30 +744,41 @@ namespace internal {
 
     public:
 
-        key_matching_port() : receiver<input_type>(), buffer_type() {
+        tag_matching_port() : receiver<T>(), tagged_buffer<tag_value, T, NO_TAG>() {
             my_join = NULL;
-            my_aggregator.initialize_handler(handler_type(this));
+            my_tag_func = NULL;
+            my_original_tag_func = NULL;
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         // copy constructor
-        key_matching_port(const key_matching_port& /*other*/) : receiver<input_type>(), buffer_type() {
+        tag_matching_port(const tag_matching_port& /*other*/) : receiver<T>(), tagged_buffer<tag_value,T, NO_TAG>() {
             my_join = NULL;
-            my_aggregator.initialize_handler(handler_type(this));
+            // setting the tag methods is done in the copy-constructor for the front-end.
+            my_tag_func = NULL;
+            my_original_tag_func = NULL;
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
-        ~key_matching_port() { }
+        ~tag_matching_port() {
+            if (my_tag_func) delete my_tag_func;
+            if (my_original_tag_func) delete my_original_tag_func;
+        }
 
         void set_join_node_pointer(forwarding_base *join) {
-            my_join = dynamic_cast<matching_forwarding_base<key_type>*>(join);
+            my_join = join;
         }
 
-        void set_my_key_func(type_to_key_func_type *f) { this->set_key_func(f); }
+        void set_my_original_tag_func(my_tag_func_type *f) {
+            my_original_tag_func = f;
+        }
 
-        type_to_key_func_type* get_my_key_func() { return this->get_key_func(); }
+        void set_my_tag_func(my_tag_func_type *f) {
+            my_tag_func = f;
+        }
 
-        bool get_item( input_type &v ) {
-            // aggregator uses current_key from FE for Key
-            key_matching_port_operation op_data(&v, get__item);
+        bool get_item( T &v ) {
+            tag_matching_port_operation op_data(&v, get__item);
             my_aggregator.execute(&op_data);
             return op_data.status == SUCCEEDED;
         }
@@ -788,26 +786,26 @@ namespace internal {
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         /*override*/built_predecessors_type &built_predecessors() { return my_built_predecessors; }
         
-        /*override*/void internal_add_built_predecessor(sender<input_type> &p) {
-            key_matching_port_operation op_data(add_blt_pred);
+        /*override*/void internal_add_built_predecessor(sender<T> &p) {
+            tag_matching_port_operation op_data(add_blt_pred);
             op_data.pred = &p;
             my_aggregator.execute(&op_data);
         }
 
-        /*override*/void internal_delete_built_predecessor(sender<input_type> &p) {
-            key_matching_port_operation op_data(del_blt_pred);
+        /*override*/void internal_delete_built_predecessor(sender<T> &p) {
+            tag_matching_port_operation op_data(del_blt_pred);
             op_data.pred = &p;
             my_aggregator.execute(&op_data);
         }
 
         /*override*/size_t predecessor_count() {
-            key_matching_port_operation op_data(blt_pred_cnt);
+            tag_matching_port_operation op_data(blt_pred_cnt);
             my_aggregator.execute(&op_data);
             return op_data.cnt_val;
         }
 
         /*override*/void copy_predecessors(predecessor_list_type &l) {
-            key_matching_port_operation op_data(blt_pred_cpy);
+            tag_matching_port_operation op_data(blt_pred_cpy);
             op_data.plist = &l;
             my_aggregator.execute(&op_data);
         }
@@ -816,42 +814,46 @@ namespace internal {
         // reset_port is called when item is accepted by successor, but
         // is initiated by join_node.
         void reset_port() {
-            key_matching_port_operation op_data(res_port);
+            tag_matching_port_operation op_data(res_port);
             my_aggregator.execute(&op_data);
             return;
         }
 
+        my_tag_func_type *my_func() { return my_tag_func; }
+        my_tag_func_type *my_original_func() { return my_original_tag_func; }
+
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         void extract_receiver() {
-            buffer_type::reset();
+            my_buffer_type::reset();
             my_built_predecessors.receiver_extract(*this);
         }
-#endif
-        /*override*/void reset_receiver(reset_flags f ) { 
-            tbb::internal::suppress_unused_warning(f);
-            buffer_type::reset(); 
-#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
+
+        /*override*/void reset_receiver(__TBB_PFG_RESET_ARG(reset_flags f)) { 
+            my_buffer_type::reset(); 
            if (f & rf_clear_edges)
               my_built_predecessors.clear();
-#endif
         }
+#else
+        /*override*/void reset_receiver(__TBB_PFG_RESET_ARG(reset_flags /*f*/)) { my_buffer_type::reset(); }
+#endif
 
     private:
-        // my_join forwarding base used to count number of inputs that
-        // received key.
-        matching_forwarding_base<key_type> *my_join;
+        // need map of tags to values
+        forwarding_base *my_join;
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         edge_container<predecessor_type> my_built_predecessors;
 #endif
-    };  // key_matching_port
+        my_tag_func_type *my_tag_func;
+        my_tag_func_type *my_original_tag_func;
+    };  // tag_matching_port
 
     using namespace graph_policy_namespace;
 
-    template<typename JP, typename InputTuple, typename OutputTuple>
+    template<graph_buffer_policy JP, typename InputTuple, typename OutputTuple>
     class join_node_base;
 
     //! join_node_FE : implements input port policy
-    template<typename JP, typename InputTuple, typename OutputTuple>
+    template<graph_buffer_policy JP, typename InputTuple, typename OutputTuple>
     class join_node_FE;
 
     template<typename InputTuple, typename OutputTuple>
@@ -860,19 +862,19 @@ namespace internal {
         static const int N = tbb::flow::tuple_size<OutputTuple>::value;
         typedef OutputTuple output_type;
         typedef InputTuple input_type;
-        typedef join_node_base<reserving, InputTuple, OutputTuple> base_node_type; // for forwarding
+        typedef join_node_base<reserving, InputTuple, OutputTuple> my_node_type; // for forwarding
 
         join_node_FE(graph &g) : forwarding_base(g), my_node(NULL) {
             ports_with_no_inputs = N;
             join_helper<N>::set_join_node_pointer(my_inputs, this);
         }
 
-        join_node_FE(const join_node_FE& other) : forwarding_base(*(other.forwarding_base::graph_pointer)), my_node(NULL) {
+        join_node_FE(const join_node_FE& other) : forwarding_base(*(other.forwarding_base::my_graph_ptr)), my_node(NULL) {
             ports_with_no_inputs = N;
             join_helper<N>::set_join_node_pointer(my_inputs, this);
         }
 
-        void set_my_node(base_node_type *new_my_node) { my_node = new_my_node; }
+        void set_my_node(my_node_type *new_my_node) { my_node = new_my_node; }
 
        void increment_port_count() {
             ++ports_with_no_inputs;
@@ -881,9 +883,10 @@ namespace internal {
         // if all input_ports have predecessors, spawn forward to try and consume tuples
         task * decrement_port_count(bool handle_task) {
             if(ports_with_no_inputs.fetch_and_decrement() == 1) {
-                if(this->graph_pointer->is_active()) {
-                    task *rtask = new ( task::allocate_additional_child_of( *(this->graph_pointer->root_task()) ) )
-                        forward_task_bypass<base_node_type>(*my_node);
+                task* tp = this->my_graph_ptr->root_task();
+                if(tp) {
+                    task *rtask = new ( task::allocate_additional_child_of( *tp ) )
+                        forward_task_bypass<my_node_type>(*my_node);
                     if(!handle_task) return rtask;
                     FLOW_SPAWN(*rtask);
                 }
@@ -895,10 +898,10 @@ namespace internal {
 
     protected:
 
-        void reset(  reset_flags f) {
+        void reset( __TBB_PFG_RESET_ARG( reset_flags f)) {
             // called outside of parallel contexts
             ports_with_no_inputs = N;
-            join_helper<N>::reset_inputs(my_inputs, f);
+            join_helper<N>::reset_inputs(my_inputs __TBB_PFG_RESET_ARG( __TBB_COMMA f));
         }
 
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
@@ -928,7 +931,7 @@ namespace internal {
         }
 
         input_type my_inputs;
-        base_node_type *my_node;
+        my_node_type *my_node;
         atomic<size_t> ports_with_no_inputs;
     };  // join_node_FE<reserving, ... >
 
@@ -938,20 +941,20 @@ namespace internal {
         static const int N = tbb::flow::tuple_size<OutputTuple>::value;
         typedef OutputTuple output_type;
         typedef InputTuple input_type;
-        typedef join_node_base<queueing, InputTuple, OutputTuple> base_node_type; // for forwarding
+        typedef join_node_base<queueing, InputTuple, OutputTuple> my_node_type; // for forwarding
 
         join_node_FE(graph &g) : forwarding_base(g), my_node(NULL) {
             ports_with_no_items = N;
             join_helper<N>::set_join_node_pointer(my_inputs, this);
         }
 
-        join_node_FE(const join_node_FE& other) : forwarding_base(*(other.forwarding_base::graph_pointer)), my_node(NULL) {
+        join_node_FE(const join_node_FE& other) : forwarding_base(*(other.forwarding_base::my_graph_ptr)), my_node(NULL) {
             ports_with_no_items = N;
             join_helper<N>::set_join_node_pointer(my_inputs, this);
         }
 
         // needed for forwarding
-        void set_my_node(base_node_type *new_my_node) { my_node = new_my_node; }
+        void set_my_node(my_node_type *new_my_node) { my_node = new_my_node; }
 
         void reset_port_count() {
             ports_with_no_items = N;
@@ -961,9 +964,10 @@ namespace internal {
         task * decrement_port_count(bool handle_task)
         {
             if(ports_with_no_items.fetch_and_decrement() == 1) {
-                if(this->graph_pointer->is_active()) {
-                    task *rtask = new ( task::allocate_additional_child_of( *(this->graph_pointer->root_task()) ) )
-                        forward_task_bypass <base_node_type>(*my_node);
+                task* tp = this->my_graph_ptr->root_task();
+                if(tp) {
+                    task *rtask = new ( task::allocate_additional_child_of( *tp ) )
+                        forward_task_bypass <my_node_type>(*my_node);
                     if(!handle_task) return rtask;
                     FLOW_SPAWN( *rtask);
                 }
@@ -977,9 +981,9 @@ namespace internal {
 
     protected:
 
-        void reset(  reset_flags f) {
+        void reset( __TBB_PFG_RESET_ARG( reset_flags f)) {
             reset_port_count();
-            join_helper<N>::reset_inputs(my_inputs, f );
+            join_helper<N>::reset_inputs(my_inputs __TBB_PFG_RESET_ARG( __TBB_COMMA f) );
         }
 
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
@@ -1008,43 +1012,22 @@ namespace internal {
         }
 
         input_type my_inputs;
-        base_node_type *my_node;
+        my_node_type *my_node;
         atomic<size_t> ports_with_no_items;
     };  // join_node_FE<queueing, ...>
 
-    // key_matching join front-end.
-    template<typename InputTuple, typename OutputTuple, typename K, typename KHash>
-    class join_node_FE<key_matching<K,KHash>, InputTuple, OutputTuple> : public matching_forwarding_base<K>,
-             // buffer of key value counts
-              public hash_buffer<   // typedefed below to key_to_count_buffer_type
-                  typename tbb::internal::strip<K>::type&,        // force ref type on K
-                  count_element<typename tbb::internal::strip<K>::type>,
-                  internal::type_to_key_function_body<
-                      count_element<typename tbb::internal::strip<K>::type>,
-                      typename tbb::internal::strip<K>::type& >,
-                  KHash >,
-             // buffer of output items
-             public item_buffer<OutputTuple> {
+    // tag_matching join input port.
+    template<typename InputTuple, typename OutputTuple>
+    class join_node_FE<tag_matching, InputTuple, OutputTuple> : public forwarding_base,
+             //     buffer of tag value counts                       buffer of output items
+             public tagged_buffer<tag_value, size_t, NO_TAG>, public item_buffer<OutputTuple> {
     public:
         static const int N = tbb::flow::tuple_size<OutputTuple>::value;
         typedef OutputTuple output_type;
         typedef InputTuple input_type;
-        typedef K key_type;
-        typedef typename tbb::internal::strip<key_type>::type unref_key_type;
-        typedef KHash key_hash_compare;
-        // must use K without ref.
-        typedef count_element<unref_key_type> count_element_type;
-        // method that lets us refer to the key of this type.
-        typedef key_to_count_functor<unref_key_type> key_to_count_func;
-        typedef internal::type_to_key_function_body< count_element_type, unref_key_type&> TtoK_function_body_type;
-        typedef internal::type_to_key_function_body_leaf<count_element_type, unref_key_type&, key_to_count_func> TtoK_function_body_leaf_type;
-        // this is the type of the special table that keeps track of the number of discrete
-        // elements corresponding to each key that we've seen.
-        typedef hash_buffer< unref_key_type&, count_element_type, TtoK_function_body_type, key_hash_compare >
-                 key_to_count_buffer_type;
+        typedef tagged_buffer<tag_value, size_t, NO_TAG> my_tag_buffer;
         typedef item_buffer<output_type> output_buffer_type;
-        typedef join_node_base<key_matching<key_type,key_hash_compare>, InputTuple, OutputTuple> base_node_type; // for forwarding
-        typedef matching_forwarding_base<key_type> forwarding_base_type;
+        typedef join_node_base<tag_matching, InputTuple, OutputTuple> my_node_type; // for forwarding
 
 // ----------- Aggregator ------------
         // the aggregator is only needed to serialize the access to the hash table.
@@ -1052,42 +1035,46 @@ namespace internal {
     private:
         enum op_type { res_count, inc_count, may_succeed, try_make };
         enum op_stat {WAIT=0, SUCCEEDED, FAILED};
-        typedef join_node_FE<key_matching<key_type,key_hash_compare>, InputTuple, OutputTuple> class_type;
+        typedef join_node_FE<tag_matching, InputTuple, OutputTuple> my_class;
 
-        class key_matching_FE_operation : public aggregated_operation<key_matching_FE_operation> {
+        class tag_matching_FE_operation : public aggregated_operation<tag_matching_FE_operation> {
         public:
             char type;
-            unref_key_type my_val;
-            output_type* my_output;
+            union {
+                tag_value my_val;
+                output_type* my_output;
+            };
             task *bypass_t;
             bool enqueue_task;
             // constructor for value parameter
-            key_matching_FE_operation(const unref_key_type& e , bool q_task , op_type t) : type(char(t)), my_val(e),
-                 my_output(NULL), bypass_t(NULL), enqueue_task(q_task) {}
-            key_matching_FE_operation(output_type *p, op_type t) : type(char(t)), my_output(p), bypass_t(NULL),
+            tag_matching_FE_operation(const tag_value& e , bool q_task , op_type t) : type(char(t)), my_val(e),
+                 bypass_t(NULL), enqueue_task(q_task) {}
+            tag_matching_FE_operation(output_type *p, op_type t) : type(char(t)), my_output(p), bypass_t(NULL),
                  enqueue_task(true) {}
             // constructor with no parameter
-            key_matching_FE_operation(op_type t) : type(char(t)), my_output(NULL), bypass_t(NULL), enqueue_task(true) {}
+            tag_matching_FE_operation(op_type t) : type(char(t)), bypass_t(NULL), enqueue_task(true) {}
         };
 
-        typedef internal::aggregating_functor<class_type, key_matching_FE_operation> handler_type;
-        friend class internal::aggregating_functor<class_type, key_matching_FE_operation>;
-        aggregator<handler_type, key_matching_FE_operation> my_aggregator;
+        typedef internal::aggregating_functor<my_class, tag_matching_FE_operation> my_handler;
+        friend class internal::aggregating_functor<my_class, tag_matching_FE_operation>;
+        aggregator<my_handler, tag_matching_FE_operation> my_aggregator;
 
         // called from aggregator, so serialized
+        // construct as many output objects as possible.
         // returns a task pointer if the a task would have been enqueued but we asked that
         // it be returned.  Otherwise returns NULL.
-        task * fill_output_buffer(unref_key_type &t, bool should_enqueue, bool handle_task) {
+        task * fill_output_buffer(tag_value t, bool should_enqueue, bool handle_task) {
             output_type l_out;
             task *rtask = NULL;
-            bool do_fwd = should_enqueue && this->buffer_empty() && this->graph_pointer->is_active();
-            this->current_key = t;
-            this->delete_with_key(this->current_key);   // remove the key
+            task* tp = this->my_graph_ptr->root_task();
+            bool do_fwd = should_enqueue && this->buffer_empty() && tp;
+            this->current_tag = t;
+            this->tagged_delete(this->current_tag);   // remove the tag
             if(join_helper<N>::get_items(my_inputs, l_out)) {  //  <== call back
                 this->push_back(l_out);
                 if(do_fwd) {  // we enqueue if receiving an item from predecessor, not if successor asks for item
-                    rtask = new ( task::allocate_additional_child_of( *(this->graph_pointer->root_task()) ) )
-                        forward_task_bypass<base_node_type>(*my_node);
+                    rtask = new ( task::allocate_additional_child_of( *tp ) )
+                        forward_task_bypass<my_node_type>(*my_node);
                     if(handle_task) {
                         FLOW_SPAWN(*rtask);
                         rtask = NULL;
@@ -1096,6 +1083,7 @@ namespace internal {
                 }
                 // retire the input values
                 join_helper<N>::reset_ports(my_inputs);  //  <== call back
+                this->current_tag = NO_TAG;
             }
             else {
                 __TBB_ASSERT(false, "should have had something to push");
@@ -1103,8 +1091,8 @@ namespace internal {
             return rtask;
         }
 
-        void handle_operations(key_matching_FE_operation* op_list) {
-            key_matching_FE_operation *current;
+        void handle_operations(tag_matching_FE_operation* op_list) {
+            tag_matching_FE_operation *current;
             while(op_list) {
                 current = op_list;
                 op_list = op_list->next;
@@ -1116,19 +1104,16 @@ namespace internal {
                     }
                     break;
                 case inc_count: {  // called from input ports
-                        count_element_type *p = 0;
-                        unref_key_type &t = current->my_val;
+                        size_t *p = 0;
+                        tag_value t = current->my_val;
                         bool do_enqueue = current->enqueue_task;
-                        if(!(this->find_ref_with_key(t,p))) {
-                            count_element_type ev;
-                            ev.my_key = t;
-                            ev.my_value = 0;
-                            this->insert_with_key(ev);
-                            if(!(this->find_ref_with_key(t,p))) {
-                                __TBB_ASSERT(false, "should find key after inserting it");
+                        if(!(this->tagged_find_ref(t,p))) {
+                            this->tagged_insert(t, 0);
+                            if(!(this->tagged_find_ref(t,p))) {
+                                __TBB_ASSERT(false, "should find tag after inserting it");
                             }
                         }
-                        if(++(p->my_value) == size_t(N)) {
+                        if(++(*p) == size_t(N)) {
                             task *rtask = fill_output_buffer(t, true, do_enqueue);
                             __TBB_ASSERT(!rtask || !do_enqueue, "task should not be returned");
                             current->bypass_t = rtask;
@@ -1155,37 +1140,33 @@ namespace internal {
 
     public:
         template<typename FunctionTuple>
-        join_node_FE(graph &g, FunctionTuple &TtoK_funcs) : forwarding_base_type(g), my_node(NULL) {
+        join_node_FE(graph &g, FunctionTuple tag_funcs) : forwarding_base(g), my_node(NULL) {
             join_helper<N>::set_join_node_pointer(my_inputs, this);
-            join_helper<N>::set_key_functors(my_inputs, TtoK_funcs);
-            my_aggregator.initialize_handler(handler_type(this));
-                    TtoK_function_body_type *cfb = new TtoK_function_body_leaf_type(key_to_count_func());
-            this->set_key_func(cfb);
+            join_helper<N>::set_tag_func(my_inputs, tag_funcs);
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
-        join_node_FE(const join_node_FE& other) : forwarding_base_type(*(other.forwarding_base_type::graph_pointer)), key_to_count_buffer_type(),
+        join_node_FE(const join_node_FE& other) : forwarding_base(*(other.forwarding_base::my_graph_ptr)), my_tag_buffer(),
         output_buffer_type() {
             my_node = NULL;
             join_helper<N>::set_join_node_pointer(my_inputs, this);
-            join_helper<N>::copy_key_functors(my_inputs, const_cast<input_type &>(other.my_inputs));
-            my_aggregator.initialize_handler(handler_type(this));
-            TtoK_function_body_type *cfb = new TtoK_function_body_leaf_type(key_to_count_func());
-            this->set_key_func(cfb);
+            join_helper<N>::copy_tag_functors(my_inputs, const_cast<input_type &>(other.my_inputs));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         // needed for forwarding
-        void set_my_node(base_node_type *new_my_node) { my_node = new_my_node; }
+        void set_my_node(my_node_type *new_my_node) { my_node = new_my_node; }
 
         void reset_port_count() {  // called from BE
-            key_matching_FE_operation op_data(res_count);
+            tag_matching_FE_operation op_data(res_count);
             my_aggregator.execute(&op_data);
             return;
         }
 
         // if all input_ports have items, spawn forward to try and consume tuples
         // return a task if we are asked and did create one.
-        /*override*/ task *increment_key_count(unref_key_type const & t, bool handle_task) {  // called from input_ports
-            key_matching_FE_operation op_data(t, handle_task, inc_count);
+        task *increment_tag_count(tag_value t, bool handle_task) {  // called from input_ports
+            tag_matching_FE_operation op_data(t, handle_task, inc_count);
             my_aggregator.execute(&op_data);
             return op_data.bypass_t;
         }
@@ -1198,41 +1179,42 @@ namespace internal {
 
     protected:
 
-        void reset(  reset_flags f ) {
+        void reset( __TBB_PFG_RESET_ARG( reset_flags f )) {
             // called outside of parallel contexts
-            join_helper<N>::reset_inputs(my_inputs, f);
+            join_helper<N>::reset_inputs(my_inputs __TBB_PFG_RESET_ARG( __TBB_COMMA f));
 
-            key_to_count_buffer_type::reset();
-            output_buffer_type::reset();
+            my_tag_buffer::reset();  // have to reset the tag counts
+            output_buffer_type::reset();  // also the queue of outputs
+            my_node->current_tag = NO_TAG;
         }
 
 #if TBB_PREVIEW_FLOW_GRAPH_FEATURES
         void extract() {
             // called outside of parallel contexts
             join_helper<N>::extract_inputs(my_inputs);
-            key_to_count_buffer_type::reset();  // have to reset the tag counts
+            my_tag_buffer::reset();  // have to reset the tag counts
             output_buffer_type::reset();  // also the queue of outputs
-            // my_node->current_tag = NO_TAG;
+            my_node->current_tag = NO_TAG;
         }
 #endif
         // all methods on input ports should be called under mutual exclusion from join_node_base.
 
         bool tuple_build_may_succeed() {  // called from back-end
-            key_matching_FE_operation op_data(may_succeed);
+            tag_matching_FE_operation op_data(may_succeed);
             my_aggregator.execute(&op_data);
             return op_data.status == SUCCEEDED;
         }
 
-        // cannot lock while calling back to input_ports.  current_key will only be set
+        // cannot lock while calling back to input_ports.  current_tag will only be set
         // and reset under the aggregator, so it will remain consistent.
         bool try_to_make_tuple(output_type &out) {
-            key_matching_FE_operation op_data(&out,try_make);
+            tag_matching_FE_operation op_data(&out,try_make);
             my_aggregator.execute(&op_data);
             return op_data.status == SUCCEEDED;
         }
 
         void tuple_accepted() {
-            reset_port_count();  // reset current_key after ports reset.
+            reset_port_count();  // reset current_tag after ports reset.
         }
 
         void tuple_rejected() {
@@ -1240,11 +1222,11 @@ namespace internal {
         }
 
         input_type my_inputs;  // input ports
-        base_node_type *my_node;
-    }; // join_node_FE<key_matching<K,KHash>, InputTuple, OutputTuple>
+        my_node_type *my_node;
+    }; // join_node_FE<tag_matching, InputTuple, OutputTuple>
 
     //! join_node_base
-    template<typename JP, typename InputTuple, typename OutputTuple>
+    template<graph_buffer_policy JP, typename InputTuple, typename OutputTuple>
     class join_node_base : public graph_node, public join_node_FE<JP, InputTuple, OutputTuple>,
                            public sender<OutputTuple> {
     protected:
@@ -1271,7 +1253,7 @@ namespace internal {
 #endif
         };
         enum op_stat {WAIT=0, SUCCEEDED, FAILED};
-        typedef join_node_base<JP,InputTuple,OutputTuple> class_type;
+        typedef join_node_base<JP,InputTuple,OutputTuple> my_class;
 
         class join_node_base_operation : public aggregated_operation<join_node_base_operation> {
         public:
@@ -1292,10 +1274,10 @@ namespace internal {
             join_node_base_operation(op_type t) : type(char(t)), bypass_t(NULL) {}
         };
 
-        typedef internal::aggregating_functor<class_type, join_node_base_operation> handler_type;
-        friend class internal::aggregating_functor<class_type, join_node_base_operation>;
+        typedef internal::aggregating_functor<my_class, join_node_base_operation> my_handler;
+        friend class internal::aggregating_functor<my_class, join_node_base_operation>;
         bool forwarder_busy;
-        aggregator<handler_type, join_node_base_operation> my_aggregator;
+        aggregator<my_handler, join_node_base_operation> my_aggregator;
 
         void handle_operations(join_node_base_operation* op_list) {
             join_node_base_operation *current;
@@ -1305,8 +1287,9 @@ namespace internal {
                 switch(current->type) {
                 case reg_succ: {
                         my_successors.register_successor(*(current->my_succ));
-                        if(tuple_build_may_succeed() && !forwarder_busy && this->graph_node::my_graph.is_active()) {
-                            task *rtask = new ( task::allocate_additional_child_of(*(this->graph_node::my_graph.root_task())) )
+                        task* tp = this->graph_node::my_graph.root_task();
+                        if(tuple_build_may_succeed() && !forwarder_busy && tp) {
+                            task *rtask = new ( task::allocate_additional_child_of(*tp) )
                                     forward_task_bypass
                                     <join_node_base<JP,InputTuple,OutputTuple> >(*this);
                             FLOW_SPAWN(*rtask);
@@ -1333,9 +1316,9 @@ namespace internal {
                         bool build_succeeded;
                         task *last_task = NULL;
                         output_type out;
-                        if(tuple_build_may_succeed()) {  // checks output queue of FE
+                        if(tuple_build_may_succeed()) {
                             do {
-                                build_succeeded = try_to_make_tuple(out);  // fetch front_end of queue
+                                build_succeeded = try_to_make_tuple(out);
                                 if(build_succeeded) {
                                     task *new_task = my_successors.try_put_task(out);
                                     last_task = combine_tasks(last_task, new_task);
@@ -1380,7 +1363,7 @@ namespace internal {
         join_node_base(graph &g) : graph_node(g), input_ports_type(g), forwarder_busy(false) {
             my_successors.set_owner(this);
             input_ports_type::set_my_node(this);
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         join_node_base(const join_node_base& other) :
@@ -1388,14 +1371,14 @@ namespace internal {
             sender<OutputTuple>(), forwarder_busy(false), my_successors() {
             my_successors.set_owner(this);
             input_ports_type::set_my_node(this);
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         template<typename FunctionTuple>
         join_node_base(graph &g, FunctionTuple f) : graph_node(g), input_ports_type(g, f), forwarder_busy(false) {
             my_successors.set_owner(this);
             input_ports_type::set_my_node(this);
-            my_aggregator.initialize_handler(handler_type(this));
+            my_aggregator.initialize_handler(my_handler(this));
         }
 
         bool register_successor(successor_type &r) {
@@ -1451,9 +1434,11 @@ namespace internal {
 
     protected:
 
-        /*override*/void reset_node(reset_flags f) {
-            input_ports_type::reset(f);
+        /*override*/void reset_node(__TBB_PFG_RESET_ARG(reset_flags f)) {
+            input_ports_type::reset(__TBB_PFG_RESET_ARG(f));
+#if TBB_PREVIEW_FLOW_GRAPH_FEATURES
             if(f & rf_clear_edges) my_successors.clear();
+#endif
         }
 
     private:
@@ -1466,30 +1451,19 @@ namespace internal {
             return op_data.bypass_t;
         }
 
-    };  // join_node_base
+    };
 
     // join base class type generator
-    template<int N, template<class> class PT, typename OutputTuple, typename JP>
+    template<int N, template<class> class PT, typename OutputTuple, graph_buffer_policy JP>
     struct join_base {
         typedef typename internal::join_node_base<JP, typename wrap_tuple_elements<N,PT,OutputTuple>::type, OutputTuple> type;
     };
 
-    template<int N, typename OutputTuple, typename K, typename KHash>
-    struct join_base<N, key_matching_port, OutputTuple, key_matching<K,KHash> > {
-        typedef key_matching<K, KHash> key_traits_type;
-        typedef K key_type;
-        typedef KHash key_hash_compare;
-        typedef typename internal::join_node_base< key_traits_type,
-                // ports type
-                typename wrap_key_tuple_elements<N,key_matching_port,key_traits_type,OutputTuple>::type,
-                OutputTuple > type;
-    };
-
     //! unfolded_join_node : passes input_ports_type to join_node_base.  We build the input port type
-    //  using tuple_element.  The class PT is the port type (reserving_port, queueing_port, key_matching_port)
-    //  and should match the typename.
+    //  using tuple_element.  The class PT is the port type (reserving_port, queueing_port, tag_matching_port)
+    //  and should match the graph_buffer_policy.
 
-    template<int N, template<class> class PT, typename OutputTuple, typename JP>
+    template<int N, template<class> class PT, typename OutputTuple, graph_buffer_policy JP>
     class unfolded_join_node : public join_base<N,PT,OutputTuple,JP>::type {
     public:
         typedef typename wrap_tuple_elements<N, PT, OutputTuple>::type input_ports_type;
@@ -1501,186 +1475,123 @@ namespace internal {
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-    template <typename K, typename T>
-    struct key_from_message_body {
-        K operator()(const T& t) const {
-            using tbb::flow::key_from_message;
-            return key_from_message<K>(t);
-        }
-    };
-    // Adds const to reference type
-    template <typename K, typename T>
-    struct key_from_message_body<K&,T> {
-        const K& operator()(const T& t) const {
-            using tbb::flow::key_from_message;
-            return key_from_message<const K&>(t);
-        }
-    };
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
-    // key_matching unfolded_join_node.  This must be a separate specialization because the constructors
+    // tag_matching unfolded_join_node.  This must be a separate specialization because the constructors
     // differ.
 
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<2,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<2,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<2,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<2,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
     public:
-        typedef typename wrap_key_tuple_elements<2,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<2,tag_matching_port,OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash>, input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1) : base_type(g,
                 func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 2, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<3,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<3,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<3,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<3,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
     public:
-        typedef typename wrap_key_tuple_elements<3,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<3, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash>, input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2) : base_type(g,
                 func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 3, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<4,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<4,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<4,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<4,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
         typedef typename tbb::flow::tuple_element<3, OutputTuple>::type T3;
     public:
-        typedef typename wrap_key_tuple_elements<4,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<4, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash>, input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
-        typedef typename internal::type_to_key_function_body<T3, K> *f3_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
+        typedef typename internal::function_body<T3, tag_value> *f3_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p, f3_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>()),
-                    new internal::type_to_key_function_body_leaf<T3, K, key_from_message_body<K,T3> >(key_from_message_body<K,T3>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2, typename Body3>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2, Body3 body3) : base_type(g,
                 func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2),
-                    new internal::type_to_key_function_body_leaf<T3, K, Body3>(body3)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 4, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2),
+                    new internal::function_body_leaf<T3, tag_value, Body3>(body3)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<5,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<5,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<5,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<5,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
         typedef typename tbb::flow::tuple_element<3, OutputTuple>::type T3;
         typedef typename tbb::flow::tuple_element<4, OutputTuple>::type T4;
     public:
-        typedef typename wrap_key_tuple_elements<5,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<5, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash> , input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
-        typedef typename internal::type_to_key_function_body<T3, K> *f3_p;
-        typedef typename internal::type_to_key_function_body<T4, K> *f4_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
+        typedef typename internal::function_body<T3, tag_value> *f3_p;
+        typedef typename internal::function_body<T4, tag_value> *f4_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p, f3_p, f4_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>()),
-                    new internal::type_to_key_function_body_leaf<T3, K, key_from_message_body<K,T3> >(key_from_message_body<K,T3>()),
-                    new internal::type_to_key_function_body_leaf<T4, K, key_from_message_body<K,T4> >(key_from_message_body<K,T4>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2, typename Body3, typename Body4>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2, Body3 body3, Body4 body4) : base_type(g,
                 func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2),
-                    new internal::type_to_key_function_body_leaf<T3, K, Body3>(body3),
-                    new internal::type_to_key_function_body_leaf<T4, K, Body4>(body4)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 5, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2),
+                    new internal::function_body_leaf<T3, tag_value, Body3>(body3),
+                    new internal::function_body_leaf<T4, tag_value, Body4>(body4)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 
 #if __TBB_VARIADIC_MAX >= 6
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<6,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<6,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<6,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<6,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
@@ -1688,50 +1599,36 @@ namespace internal {
         typedef typename tbb::flow::tuple_element<4, OutputTuple>::type T4;
         typedef typename tbb::flow::tuple_element<5, OutputTuple>::type T5;
     public:
-        typedef typename wrap_key_tuple_elements<6,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<6, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash> , input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
-        typedef typename internal::type_to_key_function_body<T3, K> *f3_p;
-        typedef typename internal::type_to_key_function_body<T4, K> *f4_p;
-        typedef typename internal::type_to_key_function_body<T5, K> *f5_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
+        typedef typename internal::function_body<T3, tag_value> *f3_p;
+        typedef typename internal::function_body<T4, tag_value> *f4_p;
+        typedef typename internal::function_body<T5, tag_value> *f5_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p, f3_p, f4_p, f5_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>()),
-                    new internal::type_to_key_function_body_leaf<T3, K, key_from_message_body<K,T3> >(key_from_message_body<K,T3>()),
-                    new internal::type_to_key_function_body_leaf<T4, K, key_from_message_body<K,T4> >(key_from_message_body<K,T4>()),
-                    new internal::type_to_key_function_body_leaf<T5, K, key_from_message_body<K,T5> >(key_from_message_body<K,T5>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2, typename Body3, typename Body4, typename Body5>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2, Body3 body3, Body4 body4, Body5 body5)
                 : base_type(g, func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2),
-                    new internal::type_to_key_function_body_leaf<T3, K, Body3>(body3),
-                    new internal::type_to_key_function_body_leaf<T4, K, Body4>(body4),
-                    new internal::type_to_key_function_body_leaf<T5, K, Body5>(body5)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 6, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2),
+                    new internal::function_body_leaf<T3, tag_value, Body3>(body3),
+                    new internal::function_body_leaf<T4, tag_value, Body4>(body4),
+                    new internal::function_body_leaf<T5, tag_value, Body5>(body5)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 #endif
 
 #if __TBB_VARIADIC_MAX >= 7
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<7,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<7,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<7,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<7,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
@@ -1740,54 +1637,39 @@ namespace internal {
         typedef typename tbb::flow::tuple_element<5, OutputTuple>::type T5;
         typedef typename tbb::flow::tuple_element<6, OutputTuple>::type T6;
     public:
-        typedef typename wrap_key_tuple_elements<7,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<7, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash> , input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
-        typedef typename internal::type_to_key_function_body<T3, K> *f3_p;
-        typedef typename internal::type_to_key_function_body<T4, K> *f4_p;
-        typedef typename internal::type_to_key_function_body<T5, K> *f5_p;
-        typedef typename internal::type_to_key_function_body<T6, K> *f6_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
+        typedef typename internal::function_body<T3, tag_value> *f3_p;
+        typedef typename internal::function_body<T4, tag_value> *f4_p;
+        typedef typename internal::function_body<T5, tag_value> *f5_p;
+        typedef typename internal::function_body<T6, tag_value> *f6_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p, f3_p, f4_p, f5_p, f6_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>()),
-                    new internal::type_to_key_function_body_leaf<T3, K, key_from_message_body<K,T3> >(key_from_message_body<K,T3>()),
-                    new internal::type_to_key_function_body_leaf<T4, K, key_from_message_body<K,T4> >(key_from_message_body<K,T4>()),
-                    new internal::type_to_key_function_body_leaf<T5, K, key_from_message_body<K,T5> >(key_from_message_body<K,T5>()),
-                    new internal::type_to_key_function_body_leaf<T6, K, key_from_message_body<K,T6> >(key_from_message_body<K,T6>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2, typename Body3, typename Body4,
                  typename Body5, typename Body6>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2, Body3 body3, Body4 body4,
                 Body5 body5, Body6 body6) : base_type(g, func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2),
-                    new internal::type_to_key_function_body_leaf<T3, K, Body3>(body3),
-                    new internal::type_to_key_function_body_leaf<T4, K, Body4>(body4),
-                    new internal::type_to_key_function_body_leaf<T5, K, Body5>(body5),
-                    new internal::type_to_key_function_body_leaf<T6, K, Body6>(body6)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 7, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2),
+                    new internal::function_body_leaf<T3, tag_value, Body3>(body3),
+                    new internal::function_body_leaf<T4, tag_value, Body4>(body4),
+                    new internal::function_body_leaf<T5, tag_value, Body5>(body5),
+                    new internal::function_body_leaf<T6, tag_value, Body6>(body6)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 #endif
 
 #if __TBB_VARIADIC_MAX >= 8
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<8,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<8,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<8,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<8,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
@@ -1797,57 +1679,41 @@ namespace internal {
         typedef typename tbb::flow::tuple_element<6, OutputTuple>::type T6;
         typedef typename tbb::flow::tuple_element<7, OutputTuple>::type T7;
     public:
-        typedef typename wrap_key_tuple_elements<8,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<8, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash> , input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
-        typedef typename internal::type_to_key_function_body<T3, K> *f3_p;
-        typedef typename internal::type_to_key_function_body<T4, K> *f4_p;
-        typedef typename internal::type_to_key_function_body<T5, K> *f5_p;
-        typedef typename internal::type_to_key_function_body<T6, K> *f6_p;
-        typedef typename internal::type_to_key_function_body<T7, K> *f7_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
+        typedef typename internal::function_body<T3, tag_value> *f3_p;
+        typedef typename internal::function_body<T4, tag_value> *f4_p;
+        typedef typename internal::function_body<T5, tag_value> *f5_p;
+        typedef typename internal::function_body<T6, tag_value> *f6_p;
+        typedef typename internal::function_body<T7, tag_value> *f7_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p, f3_p, f4_p, f5_p, f6_p, f7_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>()),
-                    new internal::type_to_key_function_body_leaf<T3, K, key_from_message_body<K,T3> >(key_from_message_body<K,T3>()),
-                    new internal::type_to_key_function_body_leaf<T4, K, key_from_message_body<K,T4> >(key_from_message_body<K,T4>()),
-                    new internal::type_to_key_function_body_leaf<T5, K, key_from_message_body<K,T5> >(key_from_message_body<K,T5>()),
-                    new internal::type_to_key_function_body_leaf<T6, K, key_from_message_body<K,T6> >(key_from_message_body<K,T6>()),
-                    new internal::type_to_key_function_body_leaf<T7, K, key_from_message_body<K,T7> >(key_from_message_body<K,T7>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2, typename Body3, typename Body4,
                  typename Body5, typename Body6, typename Body7>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2, Body3 body3, Body4 body4,
                 Body5 body5, Body6 body6, Body7 body7) : base_type(g, func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2),
-                    new internal::type_to_key_function_body_leaf<T3, K, Body3>(body3),
-                    new internal::type_to_key_function_body_leaf<T4, K, Body4>(body4),
-                    new internal::type_to_key_function_body_leaf<T5, K, Body5>(body5),
-                    new internal::type_to_key_function_body_leaf<T6, K, Body6>(body6),
-                    new internal::type_to_key_function_body_leaf<T7, K, Body7>(body7)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 8, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2),
+                    new internal::function_body_leaf<T3, tag_value, Body3>(body3),
+                    new internal::function_body_leaf<T4, tag_value, Body4>(body4),
+                    new internal::function_body_leaf<T5, tag_value, Body5>(body5),
+                    new internal::function_body_leaf<T6, tag_value, Body6>(body6),
+                    new internal::function_body_leaf<T7, tag_value, Body7>(body7)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 #endif
 
 #if __TBB_VARIADIC_MAX >= 9
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<9,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<9,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<9,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<9,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
@@ -1858,60 +1724,43 @@ namespace internal {
         typedef typename tbb::flow::tuple_element<7, OutputTuple>::type T7;
         typedef typename tbb::flow::tuple_element<8, OutputTuple>::type T8;
     public:
-        typedef typename wrap_key_tuple_elements<9,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<9, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash> , input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
-        typedef typename internal::type_to_key_function_body<T3, K> *f3_p;
-        typedef typename internal::type_to_key_function_body<T4, K> *f4_p;
-        typedef typename internal::type_to_key_function_body<T5, K> *f5_p;
-        typedef typename internal::type_to_key_function_body<T6, K> *f6_p;
-        typedef typename internal::type_to_key_function_body<T7, K> *f7_p;
-        typedef typename internal::type_to_key_function_body<T8, K> *f8_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
+        typedef typename internal::function_body<T3, tag_value> *f3_p;
+        typedef typename internal::function_body<T4, tag_value> *f4_p;
+        typedef typename internal::function_body<T5, tag_value> *f5_p;
+        typedef typename internal::function_body<T6, tag_value> *f6_p;
+        typedef typename internal::function_body<T7, tag_value> *f7_p;
+        typedef typename internal::function_body<T8, tag_value> *f8_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p, f3_p, f4_p, f5_p, f6_p, f7_p, f8_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>()),
-                    new internal::type_to_key_function_body_leaf<T3, K, key_from_message_body<K,T3> >(key_from_message_body<K,T3>()),
-                    new internal::type_to_key_function_body_leaf<T4, K, key_from_message_body<K,T4> >(key_from_message_body<K,T4>()),
-                    new internal::type_to_key_function_body_leaf<T5, K, key_from_message_body<K,T5> >(key_from_message_body<K,T5>()),
-                    new internal::type_to_key_function_body_leaf<T6, K, key_from_message_body<K,T6> >(key_from_message_body<K,T6>()),
-                    new internal::type_to_key_function_body_leaf<T7, K, key_from_message_body<K,T7> >(key_from_message_body<K,T7>()),
-                    new internal::type_to_key_function_body_leaf<T8, K, key_from_message_body<K,T8> >(key_from_message_body<K,T8>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2, typename Body3, typename Body4,
                  typename Body5, typename Body6, typename Body7, typename Body8>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2, Body3 body3, Body4 body4,
                 Body5 body5, Body6 body6, Body7 body7, Body8 body8) : base_type(g, func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2),
-                    new internal::type_to_key_function_body_leaf<T3, K, Body3>(body3),
-                    new internal::type_to_key_function_body_leaf<T4, K, Body4>(body4),
-                    new internal::type_to_key_function_body_leaf<T5, K, Body5>(body5),
-                    new internal::type_to_key_function_body_leaf<T6, K, Body6>(body6),
-                    new internal::type_to_key_function_body_leaf<T7, K, Body7>(body7),
-                    new internal::type_to_key_function_body_leaf<T8, K, Body8>(body8)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 9, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2),
+                    new internal::function_body_leaf<T3, tag_value, Body3>(body3),
+                    new internal::function_body_leaf<T4, tag_value, Body4>(body4),
+                    new internal::function_body_leaf<T5, tag_value, Body5>(body5),
+                    new internal::function_body_leaf<T6, tag_value, Body6>(body6),
+                    new internal::function_body_leaf<T7, tag_value, Body7>(body7),
+                    new internal::function_body_leaf<T8, tag_value, Body8>(body8)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 #endif
 
 #if __TBB_VARIADIC_MAX >= 10
-    template<typename OutputTuple, typename K, typename KHash>
-    class unfolded_join_node<10,key_matching_port,OutputTuple,key_matching<K,KHash> > : public
-            join_base<10,key_matching_port,OutputTuple,key_matching<K,KHash> >::type {
+    template<typename OutputTuple>
+    class unfolded_join_node<10,tag_matching_port,OutputTuple,tag_matching> : public
+            join_base<10,tag_matching_port,OutputTuple,tag_matching>::type {
         typedef typename tbb::flow::tuple_element<0, OutputTuple>::type T0;
         typedef typename tbb::flow::tuple_element<1, OutputTuple>::type T1;
         typedef typename tbb::flow::tuple_element<2, OutputTuple>::type T2;
@@ -1923,55 +1772,37 @@ namespace internal {
         typedef typename tbb::flow::tuple_element<8, OutputTuple>::type T8;
         typedef typename tbb::flow::tuple_element<9, OutputTuple>::type T9;
     public:
-        typedef typename wrap_key_tuple_elements<10,key_matching_port,key_matching<K,KHash>,OutputTuple>::type input_ports_type;
+        typedef typename wrap_tuple_elements<10, tag_matching_port, OutputTuple>::type input_ports_type;
         typedef OutputTuple output_type;
     private:
-        typedef join_node_base<key_matching<K,KHash> , input_ports_type, output_type > base_type;
-        typedef typename internal::type_to_key_function_body<T0, K> *f0_p;
-        typedef typename internal::type_to_key_function_body<T1, K> *f1_p;
-        typedef typename internal::type_to_key_function_body<T2, K> *f2_p;
-        typedef typename internal::type_to_key_function_body<T3, K> *f3_p;
-        typedef typename internal::type_to_key_function_body<T4, K> *f4_p;
-        typedef typename internal::type_to_key_function_body<T5, K> *f5_p;
-        typedef typename internal::type_to_key_function_body<T6, K> *f6_p;
-        typedef typename internal::type_to_key_function_body<T7, K> *f7_p;
-        typedef typename internal::type_to_key_function_body<T8, K> *f8_p;
-        typedef typename internal::type_to_key_function_body<T9, K> *f9_p;
+        typedef join_node_base<tag_matching, input_ports_type, output_type > base_type;
+        typedef typename internal::function_body<T0, tag_value> *f0_p;
+        typedef typename internal::function_body<T1, tag_value> *f1_p;
+        typedef typename internal::function_body<T2, tag_value> *f2_p;
+        typedef typename internal::function_body<T3, tag_value> *f3_p;
+        typedef typename internal::function_body<T4, tag_value> *f4_p;
+        typedef typename internal::function_body<T5, tag_value> *f5_p;
+        typedef typename internal::function_body<T6, tag_value> *f6_p;
+        typedef typename internal::function_body<T7, tag_value> *f7_p;
+        typedef typename internal::function_body<T8, tag_value> *f8_p;
+        typedef typename internal::function_body<T9, tag_value> *f9_p;
         typedef typename tbb::flow::tuple< f0_p, f1_p, f2_p, f3_p, f4_p, f5_p, f6_p, f7_p, f8_p, f9_p > func_initializer_type;
     public:
-#if __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING
-        unfolded_join_node(graph &g) : base_type(g,
-                func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, key_from_message_body<K,T0> >(key_from_message_body<K,T0>()),
-                    new internal::type_to_key_function_body_leaf<T1, K, key_from_message_body<K,T1> >(key_from_message_body<K,T1>()),
-                    new internal::type_to_key_function_body_leaf<T2, K, key_from_message_body<K,T2> >(key_from_message_body<K,T2>()),
-                    new internal::type_to_key_function_body_leaf<T3, K, key_from_message_body<K,T3> >(key_from_message_body<K,T3>()),
-                    new internal::type_to_key_function_body_leaf<T4, K, key_from_message_body<K,T4> >(key_from_message_body<K,T4>()),
-                    new internal::type_to_key_function_body_leaf<T5, K, key_from_message_body<K,T5> >(key_from_message_body<K,T5>()),
-                    new internal::type_to_key_function_body_leaf<T6, K, key_from_message_body<K,T6> >(key_from_message_body<K,T6>()),
-                    new internal::type_to_key_function_body_leaf<T7, K, key_from_message_body<K,T7> >(key_from_message_body<K,T7>()),
-                    new internal::type_to_key_function_body_leaf<T8, K, key_from_message_body<K,T8> >(key_from_message_body<K,T8>()),
-                    new internal::type_to_key_function_body_leaf<T9, K, key_from_message_body<K,T9> >(key_from_message_body<K,T9>())
-                    ) ) {
-        }
-#endif /* __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING */
         template<typename Body0, typename Body1, typename Body2, typename Body3, typename Body4,
             typename Body5, typename Body6, typename Body7, typename Body8, typename Body9>
         unfolded_join_node(graph &g, Body0 body0, Body1 body1, Body2 body2, Body3 body3, Body4 body4,
                 Body5 body5, Body6 body6, Body7 body7, Body8 body8, Body9 body9) : base_type(g, func_initializer_type(
-                    new internal::type_to_key_function_body_leaf<T0, K, Body0>(body0),
-                    new internal::type_to_key_function_body_leaf<T1, K, Body1>(body1),
-                    new internal::type_to_key_function_body_leaf<T2, K, Body2>(body2),
-                    new internal::type_to_key_function_body_leaf<T3, K, Body3>(body3),
-                    new internal::type_to_key_function_body_leaf<T4, K, Body4>(body4),
-                    new internal::type_to_key_function_body_leaf<T5, K, Body5>(body5),
-                    new internal::type_to_key_function_body_leaf<T6, K, Body6>(body6),
-                    new internal::type_to_key_function_body_leaf<T7, K, Body7>(body7),
-                    new internal::type_to_key_function_body_leaf<T8, K, Body8>(body8),
-                    new internal::type_to_key_function_body_leaf<T9, K, Body9>(body9)
-                    ) ) {
-            __TBB_STATIC_ASSERT(tbb::flow::tuple_size<OutputTuple>::value == 10, "wrong number of body initializers");
-        }
+                    new internal::function_body_leaf<T0, tag_value, Body0>(body0),
+                    new internal::function_body_leaf<T1, tag_value, Body1>(body1),
+                    new internal::function_body_leaf<T2, tag_value, Body2>(body2),
+                    new internal::function_body_leaf<T3, tag_value, Body3>(body3),
+                    new internal::function_body_leaf<T4, tag_value, Body4>(body4),
+                    new internal::function_body_leaf<T5, tag_value, Body5>(body5),
+                    new internal::function_body_leaf<T6, tag_value, Body6>(body6),
+                    new internal::function_body_leaf<T7, tag_value, Body7>(body7),
+                    new internal::function_body_leaf<T8, tag_value, Body8>(body8),
+                    new internal::function_body_leaf<T9, tag_value, Body9>(body9)
+                    ) ) {}
         unfolded_join_node(const unfolded_join_node &other) : base_type(other) {}
     };
 #endif

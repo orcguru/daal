@@ -1,18 +1,22 @@
-/*******************************************************************************
-* Copyright 2005-2016 Intel Corporation
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/*
+    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+
+    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
+    you can redistribute it and/or modify it under the terms of the GNU General Public License
+    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
+    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See  the GNU General Public License for more details.   You should have received a copy of
+    the  GNU General Public License along with Threading Building Blocks; if not, write to the
+    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+
+    As a special exception,  you may use this file  as part of a free software library without
+    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
+    functions from this file, or you compile this file and link it with other files to produce
+    an executable,  this file does not by itself cause the resulting executable to be covered
+    by the GNU General Public License. This exception does not however invalidate any other
+    reasons why the executable file might be covered by the GNU General Public License.
+*/
 
 #ifndef __TBB_tbb_config_H
 #define __TBB_tbb_config_H
@@ -134,12 +138,13 @@
     #endif
     #define __TBB_STATIC_ASSERT_PRESENT               (__INTEL_CXX11_MODE__ || _MSC_VER >= 1600)
     #define __TBB_CPP11_TUPLE_PRESENT                 (_MSC_VER >= 1600 || (__GXX_EXPERIMENTAL_CXX0X__ && __TBB_GCC_VERSION >= 40300))
+    /**Intel C++ compiler 14.0 crashes on using __has_include. When it fixed, condition will need to be updated. **/
     #if (__clang__ && __INTEL_COMPILER > 1400)
-        /* Older versions of Intel Compiler do not have __has_include */
         #if (__has_feature(__cxx_generalized_initializers__) && __has_include(<initializer_list>))
             #define __TBB_INITIALIZER_LISTS_PRESENT   1
         #endif
     #else
+        /** TODO: when MSVC2013 is supported by Intel C++ compiler, it will be enabled silently by compiler, so rule will need to be updated.**/
         #define __TBB_INITIALIZER_LISTS_PRESENT       __INTEL_CXX11_MODE__ && __INTEL_COMPILER >= 1400 && (_MSC_VER >= 1800 || __TBB_GCC_VERSION >= 40400 || _LIBCPP_VERSION)
     #endif
     
@@ -201,7 +206,7 @@
     #define __TBB_STATIC_ASSERT_PRESENT               (_MSC_VER >= 1600)
     #define __TBB_CPP11_TUPLE_PRESENT                 (_MSC_VER >= 1600)
     #define __TBB_INITIALIZER_LISTS_PRESENT           (_MSC_VER >= 1800)
-    #define __TBB_CONSTEXPR_PRESENT                   (_MSC_VER >= 1900)
+    #define __TBB_CONSTEXPR_PRESENT                   0
     #define __TBB_DEFAULTED_AND_DELETED_FUNC_PRESENT  (_MSC_VER >= 1800)
     #define __TBB_NOEXCEPT_PRESENT                    (_MSC_VER >= 1900)
     #define __TBB_CPP11_STD_BEGIN_END_PRESENT         (_MSC_VER >= 1700)
@@ -227,13 +232,13 @@
 // C++11 standard library features
 
 #define __TBB_CPP11_VARIADIC_TUPLE_PRESENT          (!_MSC_VER || _MSC_VER >=1800)
-#define __TBB_CPP11_TYPE_PROPERTIES_PRESENT         (_LIBCPP_VERSION || _MSC_VER >= 1700 || (__TBB_GCC_VERSION >= 50000 && __GXX_EXPERIMENTAL_CXX0X__))
+#define __TBB_CPP11_TYPE_PROPERTIES_PRESENT         (_LIBCPP_VERSION || _MSC_VER >= 1700)
 #define __TBB_TR1_TYPE_PROPERTIES_IN_STD_PRESENT    (__GXX_EXPERIMENTAL_CXX0X__ && __TBB_GCC_VERSION >= 40300 || _MSC_VER >= 1600)
-// GCC supported some of type properties since 4.7
+// GCC has a partial support of type properties
 #define __TBB_CPP11_IS_COPY_CONSTRUCTIBLE_PRESENT   (__GXX_EXPERIMENTAL_CXX0X__ && __TBB_GCC_VERSION >= 40700 || __TBB_CPP11_TYPE_PROPERTIES_PRESENT)
 
 // In GCC and MSVC, implementation of std::move_if_noexcept is not aligned with noexcept
-#define __TBB_MOVE_IF_NOEXCEPT_PRESENT           (__GXX_EXPERIMENTAL_CXX0X__ && __TBB_GCC_VERSION >= 40700 || _MSC_VER >= 1900 || __clang__ && _LIBCPP_VERSION && __TBB_NOEXCEPT_PRESENT)
+#define __TBB_MOVE_IF_NOEXCEPT_PRESENT          (__GXX_EXPERIMENTAL_CXX0X__ && __TBB_GCC_VERSION >= 40700 || _MSC_VER >= 1800 || __clang__ && _LIBCPP_VERSION && __TBB_NOEXCEPT_PRESENT)
 //TODO: Probably more accurate way is to analyze version of stdlibc++ via__GLIBCXX__ instead of __TBB_GCC_VERSION
 #define __TBB_ALLOCATOR_TRAITS_PRESENT              (__cplusplus >= 201103L && _LIBCPP_VERSION  || _MSC_VER >= 1700 ||                                             \
                                                      __GXX_EXPERIMENTAL_CXX0X__ && __TBB_GCC_VERSION >= 40700 && !(__TBB_GCC_VERSION == 40700 && __TBB_DEFINE_MIC) \
@@ -261,8 +266,7 @@
 /* Actually ICC supports gcc __sync_* intrinsics starting 11.1,
  * but 64 bit support for 32 bit target comes in later ones*/
 /* TODO: change the version back to 4.1.2 once macro __TBB_WORD_SIZE become optional */
-/* Assumed that all clang versions have these gcc compatible intrinsics. */
-#if __TBB_GCC_VERSION >= 40306 || __INTEL_COMPILER >= 1200 || __clang__
+#if __TBB_GCC_VERSION >= 40306 || __INTEL_COMPILER >= 1200
     /** built-in atomics available in GCC since 4.1.2 **/
     #define __TBB_GCC_BUILTIN_ATOMICS_PRESENT 1
 #endif
@@ -317,21 +321,23 @@
 #endif
 
 #ifndef TBB_IMPLEMENT_CPP0X
-/** By default, use C++11 classes if available **/
-    #if __clang__
-        /* Old versions of Intel Compiler do not have __has_include */
-        #if (__INTEL_COMPILER && __INTEL_COMPILER <= 1400) 
-            #define TBB_IMPLEMENT_CPP0X !(_LIBCPP_VERSION && (__cplusplus >= 201103L))
+    /** By default, use C++11 classes if available **/
+    #if __GNUC__==4 && __GNUC_MINOR__>=4 && __GXX_EXPERIMENTAL_CXX0X__
+        #define TBB_IMPLEMENT_CPP0X 0
+    #elif __clang__ && __cplusplus >= 201103L
+        //TODO: consider introducing separate macros for each file?
+        //prevent injection of corresponding tbb names into std:: namespace if native headers are present
+        #if __has_include(<thread>) || __has_include(<condition_variable>)
+            #define TBB_IMPLEMENT_CPP0X 0
         #else
-            #define TBB_IMPLEMENT_CPP0X (__cplusplus < 201103L || (!__has_include(<thread>) && !__has_include(<condition_variable>)))
+            #define TBB_IMPLEMENT_CPP0X 1
         #endif
-    #elif __GNUC__
-        #define TBB_IMPLEMENT_CPP0X (__TBB_GCC_VERSION < 40400 || !__GXX_EXPERIMENTAL_CXX0X__)
-    #elif _MSC_VER
-        #define TBB_IMPLEMENT_CPP0X (_MSC_VER < 1700)
+    #elif _MSC_VER>=1700
+        #define TBB_IMPLEMENT_CPP0X 0
+    #elif __STDCPP_THREADS__
+        #define TBB_IMPLEMENT_CPP0X 0
     #else
-        // TODO: Reconsider general approach to be more reliable, e.g. (!(__cplusplus >= 201103L && __ STDC_HOSTED__))
-        #define TBB_IMPLEMENT_CPP0X (!__STDCPP_THREADS__)
+        #define TBB_IMPLEMENT_CPP0X 1
     #endif
 #endif /* TBB_IMPLEMENT_CPP0X */
 
@@ -413,10 +419,6 @@
 #endif /* __TBB_SLEEP_PERMISSION */
 
 #if TBB_PREVIEW_FLOW_GRAPH_TRACE
-// Users of flow-graph trace need to explicitly link against the preview library.  This
-// prevents the linker from implicitly linking an application with a preview version of
-// TBB and unexpectedly bringing in other community preview features, which might change
-// the behavior of the application.
 #define __TBB_NO_IMPLICIT_LINKAGE 1
 #endif /* TBB_PREVIEW_FLOW_GRAPH_TRACE */
 
@@ -545,7 +547,7 @@
     #define __TBB_SSE_STACK_ALIGNMENT_BROKEN 0
 #endif
 
-#if __TBB_GCC_VERSION==40300 && !__INTEL_COMPILER && !__clang__
+#if __GNUC__==4 && __GNUC_MINOR__==3 && __GNUC_PATCHLEVEL__==0
     /* GCC of this version may rashly ignore control dependencies */
     #define __TBB_GCC_OPTIMIZER_ORDERING_BROKEN 1
 #endif
@@ -625,7 +627,7 @@
     #define __TBB_FORCE_64BIT_ALIGNMENT_BROKEN 0
 #endif
 
-#if __GNUC__ && !__INTEL_COMPILER && !__clang__ && __TBB_DEFAULTED_AND_DELETED_FUNC_PRESENT && __TBB_GCC_VERSION < 40700
+#if __TBB_DEFAULTED_AND_DELETED_FUNC_PRESENT && __TBB_GCC_VERSION < 40700 && !defined(__INTEL_COMPILER) && !defined (__clang__)
     #define __TBB_ZERO_INIT_WITH_DEFAULTED_CTOR_BROKEN 1
 #endif
 
@@ -664,10 +666,8 @@
 #define __TBB_ALLOCATOR_CONSTRUCT_VARIADIC      (__TBB_CPP11_VARIADIC_TEMPLATES_PRESENT && __TBB_CPP11_RVALUE_REF_PRESENT)
 
 #define __TBB_VARIADIC_PARALLEL_INVOKE          (TBB_PREVIEW_VARIADIC_PARALLEL_INVOKE && __TBB_CPP11_VARIADIC_TEMPLATES_PRESENT && __TBB_CPP11_RVALUE_REF_PRESENT)
-#define __TBB_FLOW_GRAPH_CPP11_FEATURES         (__TBB_CPP11_VARIADIC_TEMPLATES_PRESENT \
-                                                && __TBB_CPP11_RVALUE_REF_PRESENT && __TBB_CPP11_AUTO_PRESENT) \
-                                                && __TBB_CPP11_VARIADIC_TUPLE_PRESENT && !__TBB_UPCAST_OF_TUPLE_OF_REF_BROKEN
-#define __TBB_PREVIEW_ASYNC_NODE (__TBB_FLOW_GRAPH_CPP11_FEATURES && TBB_PREVIEW_FLOW_GRAPH_NODES)
-#define __TBB_PREVIEW_OPENCL_NODE               (__TBB_FLOW_GRAPH_CPP11_FEATURES && TBB_PREVIEW_FLOW_GRAPH_NODES && !TBB_IMPLEMENT_CPP0X)
-#define __TBB_PREVIEW_MESSAGE_BASED_KEY_MATCHING (TBB_PREVIEW_FLOW_GRAPH_FEATURES || __TBB_PREVIEW_OPENCL_NODE)
+#define __TBB_PREVIEW_COMPOSITE_NODE            (TBB_PREVIEW_FLOW_GRAPH_NODES && __TBB_CPP11_VARIADIC_TEMPLATES_PRESENT \
+                                                 && __TBB_CPP11_RVALUE_REF_PRESENT && __TBB_CPP11_AUTO_PRESENT) \
+                                                 && __TBB_CPP11_VARIADIC_TUPLE_PRESENT && !__TBB_UPCAST_OF_TUPLE_OF_REF_BROKEN
+#define __TBB_PREVIEW_ASYNC_NODE TBB_PREVIEW_FLOW_GRAPH_NODES
 #endif /* __TBB_tbb_config_H */

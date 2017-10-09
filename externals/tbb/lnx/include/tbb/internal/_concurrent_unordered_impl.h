@@ -1,18 +1,22 @@
-/*******************************************************************************
-* Copyright 2005-2016 Intel Corporation
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/*
+    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+
+    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
+    you can redistribute it and/or modify it under the terms of the GNU General Public License
+    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
+    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See  the GNU General Public License for more details.   You should have received a copy of
+    the  GNU General Public License along with Threading Building Blocks; if not, write to the
+    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+
+    As a special exception,  you may use this file  as part of a free software library without
+    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
+    functions from this file, or you compile this file and link it with other files to produce
+    an executable,  this file does not by itself cause the resulting executable to be covered
+    by the GNU General Public License. This exception does not however invalidate any other
+    reasons why the executable file might be covered by the GNU General Public License.
+*/
 
 /* Container implementations in this header are based on PPL implementations 
    provided by Microsoft. */
@@ -49,8 +53,6 @@
 #if __TBB_INITIALIZER_LISTS_PRESENT
     #include <initializer_list>
 #endif
-
-#include "_tbb_hash_compare_impl.h"
 
 namespace tbb {
 namespace interface5 {
@@ -639,6 +641,32 @@ private:
     typename allocator_type::template rebind<node>::other my_node_allocator;  // allocator object for nodes
     size_type                                             my_element_count;   // Total item count, not counting dummy nodes
     nodeptr_t                                             my_head;            // pointer to head node
+};
+
+// Template class for hash compare
+template<typename Key, typename Hasher, typename Key_equality>
+class hash_compare
+{
+public:
+    typedef Hasher hasher;
+    typedef Key_equality key_equal;
+
+    hash_compare() {}
+
+    hash_compare(Hasher a_hasher) : my_hash_object(a_hasher) {}
+
+    hash_compare(Hasher a_hasher, Key_equality a_keyeq) : my_hash_object(a_hasher), my_key_compare_object(a_keyeq) {}
+
+    size_t operator()(const Key& key) const {
+        return ((size_t)my_hash_object(key));
+    }
+
+    bool operator()(const Key& key1, const Key& key2) const {
+        return (!my_key_compare_object(key1, key2));
+    }
+
+    Hasher       my_hash_object;        // The hash object
+    Key_equality my_key_compare_object; // The equality comparator object
 };
 
 #if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
@@ -1536,8 +1564,47 @@ private:
 #pragma warning(pop) // warning 4127 is back
 #endif
 
+//! Hash multiplier
+static const size_t hash_multiplier = tbb::internal::select_size_t_constant<2654435769U, 11400714819323198485ULL>::value;
 } // namespace internal
 //! @endcond
+//! Hasher functions
+template<typename T>
+inline size_t tbb_hasher( const T& t ) {
+    return static_cast<size_t>( t ) * internal::hash_multiplier;
+}
+template<typename P>
+inline size_t tbb_hasher( P* ptr ) {
+    size_t const h = reinterpret_cast<size_t>( ptr );
+    return (h >> 3) ^ h;
+}
+template<typename E, typename S, typename A>
+inline size_t tbb_hasher( const std::basic_string<E,S,A>& s ) {
+    size_t h = 0;
+    for( const E* c = s.c_str(); *c; ++c )
+        h = static_cast<size_t>(*c) ^ (h * internal::hash_multiplier);
+    return h;
+}
+template<typename F, typename S>
+inline size_t tbb_hasher( const std::pair<F,S>& p ) {
+    return tbb_hasher(p.first) ^ tbb_hasher(p.second);
+}
 } // namespace interface5
+using interface5::tbb_hasher;
+
+
+// Template class for hash compare
+template<typename Key>
+class tbb_hash
+{
+public:
+    tbb_hash() {}
+
+    size_t operator()(const Key& key) const
+    {
+        return tbb_hasher(key);
+    }
+};
+
 } // namespace tbb
 #endif // __TBB__concurrent_unordered_impl_H

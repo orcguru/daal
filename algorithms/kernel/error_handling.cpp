@@ -22,6 +22,7 @@
 */
 
 #include <cstring>
+#include <string.h>
 #include "error_handling.h"
 #include "daal_string.h"
 #include "mkl_daal.h"
@@ -48,7 +49,7 @@ void String::initialize(const char *str, const size_t length)
     if(length)
     {
         _c_str = (char *)daal::services::daal_malloc(sizeof(char) * (length + 1));
-        fpk_serv_strncpy_s(_c_str, length + 1, str, length + 1);
+        strncpy(_c_str, str, length + 1);
     }
 }
 
@@ -85,14 +86,14 @@ void String::add(const String &str)
 {
     size_t prevLength = length();
     char *prevStr = (char *)daal::services::daal_malloc(sizeof(char) * (prevLength + 1));
-    fpk_serv_strncpy_s(prevStr, prevLength + 1, _c_str, prevLength + 1);
+    strncpy(prevStr, _c_str, prevLength + 1);
 
     size_t newLength = prevLength + str.length() + 1;
     if(_c_str) { daal_free(_c_str); }
     _c_str = (char *)daal::services::daal_malloc(sizeof(char) * (newLength + 1));
 
-    fpk_serv_strncpy_s(_c_str, prevLength + 1, prevStr, prevLength + 1);
-    fpk_serv_strncat_s(_c_str, newLength, str.c_str(), newLength - prevLength);
+    strncpy(_c_str, prevStr, prevLength + 1);
+    strncat(_c_str, str.c_str(), newLength - prevLength);
 
     if(prevStr) { daal_free(prevStr); }
 }
@@ -145,7 +146,7 @@ template<> void toString<double>(double value, char *buffer)
 
 template<> void toString<String>(String value, char *buffer)
 {
-    fpk_serv_strncpy_s(buffer, String::__DAAL_STR_MAX_SIZE, value.c_str(), String::__DAAL_STR_MAX_SIZE - value.length() );
+    strncpy(buffer, value.c_str(), String::__DAAL_STR_MAX_SIZE - value.length() );
 }
 
 ErrorMessageCollection errorMessageCollection = ErrorMessageCollection();
@@ -158,18 +159,18 @@ void describeDetailCollection(const Collection<SharedPtr<ErrorDetail<T> > > &det
     {
         for(size_t j = 0; j < details.size(); j++)
         {
-            fpk_serv_strncat_s(description, String::__DAAL_STR_MAX_SIZE, errorDetailCollection.find(details[j]->id())->description(),
+            strncat(description, errorDetailCollection.find(details[j]->id())->description(),
                                String::__DAAL_STR_MAX_SIZE - strnlen(description, String::__DAAL_STR_MAX_SIZE));
-            fpk_serv_strncat_s(description, String::__DAAL_STR_MAX_SIZE, ": ",
+            strncat(description, ": ",
                                String::__DAAL_STR_MAX_SIZE - strnlen(description, String::__DAAL_STR_MAX_SIZE));
 
             char buffer[String::__DAAL_STR_MAX_SIZE] = {0};
             toString<T>(details[j]->value(), buffer);
-            fpk_serv_strncat_s(description,
-                               String::__DAAL_STR_MAX_SIZE, buffer,
+            strncat(description,
+                               buffer,
                                String::__DAAL_STR_MAX_SIZE - strnlen(description, String::__DAAL_STR_MAX_SIZE));
 
-            fpk_serv_strncat_s(description, String::__DAAL_STR_MAX_SIZE, "\n",
+            strncat(description, "\n",
                                String::__DAAL_STR_MAX_SIZE - strnlen(description, String::__DAAL_STR_MAX_SIZE));
         }
     }
@@ -177,9 +178,8 @@ void describeDetailCollection(const Collection<SharedPtr<ErrorDetail<T> > > &det
 
 int cat(const char *source, char *destination)
 {
-    return fpk_serv_strncat_s(destination,
-                              String::__DAAL_STR_MAX_SIZE, source,
-                              String::__DAAL_STR_MAX_SIZE - strnlen(destination, String::__DAAL_STR_MAX_SIZE));
+    strncat(destination, source, String::__DAAL_STR_MAX_SIZE - strnlen(destination, String::__DAAL_STR_MAX_SIZE));
+    return strlen(source);
 }
 }
 

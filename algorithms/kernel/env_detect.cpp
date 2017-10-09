@@ -21,7 +21,7 @@
 //--
 */
 
-#include <immintrin.h>
+//#include <immintrin.h>	felix
 
 #include "env_detect.h"
 #include "daal_defines.h"
@@ -71,7 +71,7 @@ DAAL_EXPORT daal::services::Environment::Environment() : _init(0)
     _env.cpuid_init_flag = false;
     _env.cpuid = -1;
 
-    _numThreads = fpk_serv_get_max_threads();
+    _numThreads = 1;
 }
 
 DAAL_EXPORT daal::services::Environment::Environment(const Environment& e) : _init(0)
@@ -94,7 +94,6 @@ void daal::services::Environment::_cpu_detect(int enable)
 DAAL_EXPORT void daal::services::Environment::setNumberOfThreads(const size_t numThreads)
 {
     _numThreads = daal::setNumberOfThreads(numThreads, &_init);
-    fpk_serv_set_num_threads(_numThreads);
 }
 
 DAAL_EXPORT size_t daal::services::Environment::getNumberOfThreads() const { return _numThreads; }

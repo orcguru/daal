@@ -1,5 +1,5 @@
 #===============================================================================
-# Copyright 2014-2016 Intel Corporation
+# Copyright 2012-2016 Intel Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,26 @@
 # limitations under the License.
 #===============================================================================
 
-##  Content:
-##     Intel(R) Data Analytics Acceleration Library algorithms list
-##******************************************************************************
+#++
+#  g++ defenitions for makefile
+#--
 
-CORE.ALGORITHMS     := kmeans
+PLATs.gcc = lnx32e lnx32
 
-CORE.ALGORITHMS.INC := kmeans
+CMPLRDIRSUFF.gcc = _gcc
 
-//CORE.SERVICES       := compression
+CORE.SERV.COMPILER.gcc = generic
 
-JJ.ALGORITHMS       := kmeans                                                    \
-                       kmeans/init
+-Zl.gcc = $(if $(OS_is_win),-Zl,)
 
-JJ.DATA_MANAGEMENT  := data                                                      \
-                       data_source
+COMPILER.lnx.gcc = g++ -D__int64="long long" -D__int32="int" -m64
 
-JJ.SERVICES         := libraryversioninfo
+link.dynamic.lnx.gcc = g++ -m64
+
+p4_OPT.gcc   = $(-Q)mcpu=power8 -mtune=power8
+mc_OPT.gcc   = $(-Q)mcpu=power8 -mtune=power8
+mc3_OPT.gcc  = $(-Q)mcpu=power8 -mtune=power8
+avx_OPT.gcc  = $(-Q)mcpu=power8 -mtune=power8
+avx2_OPT.gcc = $(-Q)mcpu=power8 -mtune=power8
+knl_OPT.gcc  = $(-Q)mcpu=power8 -mtune=power8
+skx_OPT.gcc  = $(-Q)mcpu=power8 -mtune=power8

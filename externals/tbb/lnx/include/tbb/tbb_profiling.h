@@ -1,18 +1,22 @@
-/*******************************************************************************
-* Copyright 2005-2016 Intel Corporation
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/*
+    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+
+    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
+    you can redistribute it and/or modify it under the terms of the GNU General Public License
+    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
+    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See  the GNU General Public License for more details.   You should have received a copy of
+    the  GNU General Public License along with Threading Building Blocks; if not, write to the
+    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+
+    As a special exception,  you may use this file  as part of a free software library without
+    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
+    functions from this file, or you compile this file and link it with other files to produce
+    an executable,  this file does not by itself cause the resulting executable to be covered
+    by the GNU General Public License. This exception does not however invalidate any other
+    reasons why the executable file might be covered by the GNU General Public License.
+*/
 
 #ifndef __TBB_profiling_H
 #define __TBB_profiling_H
@@ -146,10 +150,6 @@ namespace tbb {
         void __TBB_EXPORTED_FUNC itt_task_begin_v7( itt_domain_enum domain, void *task, unsigned long long task_extra, 
                                                     void *parent, unsigned long long parent_extra, string_index name_index );
         void __TBB_EXPORTED_FUNC itt_task_end_v7( itt_domain_enum domain );
-
-        void __TBB_EXPORTED_FUNC itt_region_begin_v9( itt_domain_enum domain, void *region, unsigned long long region_extra, 
-                                                      void *parent, unsigned long long parent_extra, string_index name_index );
-        void __TBB_EXPORTED_FUNC itt_region_end_v9( itt_domain_enum domain, void *region, unsigned long long region_extra );
 #endif // __TBB_ITT_STRUCTURE_API
 
         // two template arguments are to workaround /Wp64 warning with tbb::atomic specialized for unsigned type
@@ -262,15 +262,6 @@ namespace tbb {
 
         inline void itt_task_end( itt_domain_enum domain ) {
             itt_task_end_v7( domain );
-        }
-
-        inline void itt_region_begin( itt_domain_enum domain, void *region, unsigned long long region_extra, 
-                                      void *parent, unsigned long long parent_extra, string_index name_index ) {
-            itt_region_begin_v9( domain, region, region_extra, parent, parent_extra, name_index );
-        }
-
-        inline void itt_region_end( itt_domain_enum domain, void *region, unsigned long long region_extra  ) {
-            itt_region_end_v9( domain, region, region_extra );
         }
 #endif // __TBB_ITT_STRUCTURE_API
 

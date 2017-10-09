@@ -1,46 +1,42 @@
-/*******************************************************************************
-* Copyright 2005-2016 Intel Corporation
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/*
+    Copyright 2005-2015 Intel Corporation.  All Rights Reserved.
+
+    This file is part of Threading Building Blocks. Threading Building Blocks is free software;
+    you can redistribute it and/or modify it under the terms of the GNU General Public License
+    version 2  as  published  by  the  Free Software Foundation.  Threading Building Blocks is
+    distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See  the GNU General Public License for more details.   You should have received a copy of
+    the  GNU General Public License along with Threading Building Blocks; if not, write to the
+    Free Software Foundation, Inc.,  51 Franklin St,  Fifth Floor,  Boston,  MA 02110-1301 USA
+
+    As a special exception,  you may use this file  as part of a free software library without
+    restriction.  Specifically,  if other files instantiate templates  or use macros or inline
+    functions from this file, or you compile this file and link it with other files to produce
+    an executable,  this file does not by itself cause the resulting executable to be covered
+    by the GNU General Public License. This exception does not however invalidate any other
+    reasons why the executable file might be covered by the GNU General Public License.
+*/
 
 #ifndef __TBB_tbb_thread_H
 #define __TBB_tbb_thread_H
 
 #include "tbb_stddef.h"
-
 #if _WIN32||_WIN64
 #include "machine/windows_api.h"
 #define __TBB_NATIVE_THREAD_ROUTINE unsigned WINAPI
 #define __TBB_NATIVE_THREAD_ROUTINE_PTR(r) unsigned (WINAPI* r)( void* )
-namespace tbb { namespace internal {
 #if __TBB_WIN8UI_SUPPORT
-    typedef size_t thread_id_type;
+typedef size_t thread_id_type;
 #else  // __TBB_WIN8UI_SUPPORT
-    typedef DWORD thread_id_type;
+typedef DWORD thread_id_type;
 #endif // __TBB_WIN8UI_SUPPORT
-}} //namespace tbb::internal
 #else
 #define __TBB_NATIVE_THREAD_ROUTINE void*
 #define __TBB_NATIVE_THREAD_ROUTINE_PTR(r) void* (*r)( void* )
 #include <pthread.h>
-namespace tbb { namespace internal {
-    typedef pthread_t thread_id_type;
-}} //namespace tbb::internal
 #endif // _WIN32||_WIN64
 
-#include "atomic.h"
-#include "internal/_tbb_hash_compare_impl.h"
 #include "tick_count.h"
 
 #if !TBB_USE_EXCEPTIONS && _MSC_VER
@@ -49,7 +45,6 @@ namespace tbb { namespace internal {
     #pragma warning (disable: 4530)
 #endif
 
-#include <utility> //for swap
 #include <iosfwd>
 
 #if !TBB_USE_EXCEPTIONS && _MSC_VER
@@ -227,9 +222,13 @@ namespace internal {
     };
         
     class tbb_thread_v3::id { 
+#if _WIN32||_WIN64
         thread_id_type my_id;
         id( thread_id_type id_ ) : my_id(id_) {}
-
+#else
+        pthread_t my_id;
+        id( pthread_t id_ ) : my_id(id_) {}
+#endif // _WIN32||_WIN64
         friend class tbb_thread_v3;
     public:
         id() __TBB_NOEXCEPT(true) : my_id(0) {}
@@ -250,16 +249,6 @@ namespace internal {
             return out;
         }
         friend tbb_thread_v3::id __TBB_EXPORTED_FUNC thread_get_id_v3();
-
-        friend inline size_t tbb_hasher( const tbb_thread_v3::id& id ) {
-            __TBB_STATIC_ASSERT(sizeof(id.my_id) <= sizeof(size_t), "Implementaion assumes that thread_id_type fits into machine word");
-            return tbb::tbb_hasher(id.my_id);
-        }
-
-        // A workaround for lack of tbb::atomic<id> (which would require id to be POD in C++03).
-        friend id atomic_compare_and_swap(id& location, const id& value, const id& comparand){
-            return as_atomic(location.my_id).compare_and_swap(value.my_id, comparand.my_id);
-        }
     }; // tbb_thread_v3::id
 
     tbb_thread_v3::id tbb_thread_v3::get_id() const __TBB_NOEXCEPT(true) {
@@ -269,7 +258,6 @@ namespace internal {
         return id(my_handle);
 #endif // _WIN32||_WIN64
     }
-
     void __TBB_EXPORTED_FUNC move_v3( tbb_thread_v3& t1, tbb_thread_v3& t2 );
     tbb_thread_v3::id __TBB_EXPORTED_FUNC thread_get_id_v3();
     void __TBB_EXPORTED_FUNC thread_yield_v3();
@@ -317,9 +305,13 @@ inline void move( tbb_thread& t1, tbb_thread& t2 ) {
 }
 
 inline void swap( internal::tbb_thread_v3& t1, internal::tbb_thread_v3& t2 )  __TBB_NOEXCEPT(true) {
-    std::swap(t1.my_handle, t2.my_handle);
+    tbb::tbb_thread::native_handle_type h = t1.my_handle;
+    t1.my_handle = t2.my_handle;
+    t2.my_handle = h;
 #if _WIN32||_WIN64
-    std::swap(t1.my_thread_id, t2.my_thread_id);
+    thread_id_type i = t1.my_thread_id;
+    t1.my_thread_id  = t2.my_thread_id;
+    t2.my_thread_id  = i;
 #endif /* _WIN32||_WIN64 */
 }
 

@@ -27,10 +27,13 @@
 
 #include "threading.h"
 #include "service_blas.h"
-#include "service_spblas.h"
+//#include "service_spblas.h"
+#include <iostream>
 
 using namespace daal::services::internal;
 using namespace daal::internal;
+using std::cout;
+using std::endl;
 
 namespace daal
 {
@@ -145,7 +148,8 @@ void addNTToTaskThreadedDense(void * task_id, const NumericTable * ntData, inter
         interm beta = 0.0;
         MKL_INT ldaty = nClusters;
 
-        Blas<interm, cpu>::xxgemm(&transa, &transb, &_m, &_n, &_k, &alpha, inClusters,
+        cout << "Invoke xgemm with lda: " << lda << endl;
+        Blas<interm, cpu>::xgemm(&transa, &transb, &_m, &_n, &_k, &alpha, inClusters,
             &lda, data, &ldy, &beta, x_clusters, &ldaty);
 
         for (size_t i = 0; i < blockSize; i++)
@@ -191,6 +195,7 @@ void addNTToTaskThreadedDense(void * task_id, const NumericTable * ntData, inter
 template<typename interm, CpuType cpu, int assignFlag>
 void addNTToTaskThreadedCSR(void * task_id, const NumericTable * ntDataGen, interm *catCoef, NumericTable * ntAssign = 0 )
 {
+    /*
     CSRNumericTableIface *ntData  = dynamic_cast<CSRNumericTableIface *>(const_cast<NumericTable *>(ntDataGen));
 
     struct task<interm,cpu> * t = static_cast<task<interm,cpu> *>(task_id);
@@ -248,7 +253,7 @@ void addNTToTaskThreadedCSR(void * task_id, const NumericTable * ntDataGen, inte
             MKL_INT ldaty = blockSize;
             char matdescra[6] = {'G',0,0,'F',0,0};
 
-            SpBlas<interm, cpu>::xxcsrmm(&transa, &_n, &_c, &_p, &alpha, matdescra,
+            SpBlas<interm, cpu>::xcsrmm(&transa, &_n, &_c, &_p, &alpha, matdescra,
                          data, (MKL_INT*)colIdx, (MKL_INT*)rowIdx,
                          inClusters, &_p, &beta, x_clusters, &_n);
         }
@@ -295,6 +300,7 @@ void addNTToTaskThreadedCSR(void * task_id, const NumericTable * ntDataGen, inte
 
         ntData->releaseSparseBlock(dataBlock);
     } );
+    */
 }
 
 template<Method method, typename interm, CpuType cpu, int assignFlag>
@@ -356,7 +362,8 @@ void getNTAssignmentsThreaded(void * task_id, const NumericTable * ntData, const
         interm beta = 0.0;
         MKL_INT ldaty = nClusters;
 
-        Blas<interm, cpu>::xxgemm(&transa, &transb, &_m, &_n, &_k, &alpha, inClusters,
+        //felix: change from xxgemm to xgemm
+        Blas<interm, cpu>::xgemm(&transa, &transb, &_m, &_n, &_k, &alpha, inClusters,
             &lda, data, &ldy, &beta, x_clusters, &ldaty);
 
         for (size_t i = 0; i < blockSize; i++)

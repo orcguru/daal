@@ -24,8 +24,8 @@
 #===============================================================================
 # TODO: Separate generic parts from content definition parts.
 
-COMPILERs = icc gnu clang vc
-COMPILER ?= icc
+COMPILERs = gcc gnu clang vc
+COMPILER ?= gcc
 
 $(if $(filter $(COMPILERs),$(COMPILER)),,$(error COMPILER must be one of $(COMPILERs)))
 
@@ -135,7 +135,7 @@ _OSr := $(if $(OS_is_win),win,$(if $(OS_is_lnx),lin,))
 
 # List of needed threadings layers can be specified in DAALTHRS.
 # if DAALTHRS is empty, tbb threading will be incapsulated to core
-DAALTHRS ?= tbb seq
+DAALTHRS ?= tbb #seq
 DAALAY   ?= a y
 
 DIR:=.
@@ -179,9 +179,9 @@ core_a    := $(plib)daal_core.$a
 core_y    := $(plib)daal_core.$y
 
 thr_tbb_a := $(plib)daal_thread.$a
-thr_seq_a := $(plib)daal_sequential.$a
+#thr_seq_a := $(plib)daal_sequential.$a
 thr_tbb_y := $(plib)daal_thread.$y
-thr_seq_y := $(plib)daal_sequential.$y
+#thr_seq_y := $(plib)daal_sequential.$y
 
 iface_a   := $(plib)daal_interface.$a
 iface_y   := $(plib)daal_interface.$y
@@ -190,19 +190,19 @@ daal_jar  := daal.jar
 
 jni_so    := $(plib)JavaAPI.$y
 
-release.LIBS_A := $(core_a)                                                             \
-                  $(if $(OS_is_win),$(foreach ilib,$(core_a),$(ilib:%.lib=%_dll.lib)),) \
-                  $(if $(DAALTHRS),$(foreach i,$(DAALTHRS),$(thr_$(i)_a)),)
-release.LIBS_Y := $(core_y) $(if $(DAALTHRS),$(foreach i,$(DAALTHRS),$(thr_$(i)_y)),)
+#release.LIBS_A := $(core_a)                                                             \
+#                  $(if $(OS_is_win),$(foreach ilib,$(core_a),$(ilib:%.lib=%_dll.lib)),) \
+#                  $(if $(DAALTHRS),$(foreach i,$(DAALTHRS),$(thr_$(i)_a)),)
+#release.LIBS_Y := $(core_y) $(if $(DAALTHRS),$(foreach i,$(DAALTHRS),$(thr_$(i)_y)),)
 release.LIBS_J := $(jni_so)
 release.JARS = $(daal_jar)
 
 # Libraries required for building
-daaldep.lnx32e.mkl.thr := -L$(VMLDIR.libia) -ldaal_mkl_thread
-daaldep.lnx32e.mkl.seq := -L$(VMLDIR.libia) -ldaal_mkl_sequential
+daaldep.lnx32e.mkl.thr := -L/usr/lib64/openblas-dev -lopenblas
+#daaldep.lnx32e.mkl.seq := -L$(VMLDIR.libia) -ldaal_mkl_sequential
 daaldep.lnx32e.mkl := $(VMLDIR.libia)/$(plib)mkl_daal_core.$a
-daaldep.lnx32e.vml := $(VMLDIR.libia)/$(plib)vml_daal.$a
-daaldep.lnx32e.ipp := $(IPPDIR.libia)/libippdaal.$a $(IPPDIR.libia)/libdaalzlib.$a $(IPPDIR.libia)/libdaalbzlib.$a
+#daaldep.lnx32e.vml := $(VMLDIR.libia)/$(plib)vml_daal.$a
+#daaldep.lnx32e.ipp := $(IPPDIR.libia)/libippdaal.$a $(IPPDIR.libia)/libdaalzlib.$a $(IPPDIR.libia)/libdaalbzlib.$a
 daaldep.lnx32e.rt  := -L$(TBBDIR.libia) -ltbb -lpthread $(daaldep.lnx32e.rt.$(COMPILER))
 
 daaldep.lnx32.mkl.thr := -L$(VMLDIR.libia) -ldaal_mkl_thread
@@ -300,11 +300,10 @@ IFACE.SERV.srcdir         := $(DIR)/service/interface
 
 CORE.srcdirs  := $(IFACE.srcdir) $(CORE.srcdir) $(if $(DAALTHRS),,$(THR.srcdir)) \
                  $(addprefix $(CORE.srcdir)/, $(CORE.ALGORITHMS))                \
-                 $(addprefix $(CORE.SERV.srcdir)/, $(CORE.SERVICES))             \
                  $(CORE.SERV.COMPILER.srcdir) $(EXTERNALS.srcdir)
 CORE.incdirs.rel  := $(addprefix ./include/,$(addprefix algorithms/,$(CORE.ALGORITHMS.INC)) algorithms data_management/compression data_management/data_source data_management/data services)
 CORE.incdirs.thr    := $(THR.srcdir)
-CORE.incdirs.core   := $(CORE.srcdir)  $(addprefix $(CORE.srcdir)/, $(CORE.ALGORITHMS)) $(addprefix $(CORE.SERV.srcdir)/, $(CORE.SERVICES))
+CORE.incdirs.core   := $(CORE.srcdir)  $(addprefix $(CORE.srcdir)/, $(CORE.ALGORITHMS))
 CORE.incdirs.common := $(DIR)/include
 CORE.incdirs.thirdp := $(EXTERNALS.srcdir) $(VMLDIR.include) $(TBBDIR.include) $(IPPDIR.include)
 CORE.incdirs := $(CORE.incdirs.rel) $(CORE.incdirs.thr) $(CORE.incdirs.core) $(CORE.incdirs.common) $(CORE.incdirs.thirdp)
@@ -427,15 +426,15 @@ THR.tmpdir_a := $(WORKDIR)/thread
 THR.tmpdir_y := $(WORKDIR)/thread_dll
 THR_TBB.objs_a := $(addprefix $(THR.tmpdir_a)/,$(THR.srcs:%.cpp=%_tbb.$o))
 THR_TBB.objs_y := $(addprefix $(THR.tmpdir_y)/,$(THR.srcs:%.cpp=%_tbb.$o))
-THR_SEQ.objs_a := $(addprefix $(THR.tmpdir_a)/,$(THR.srcs:%.cpp=%_seq.$o))
-THR_SEQ.objs_y := $(addprefix $(THR.tmpdir_y)/,$(THR.srcs:%.cpp=%_seq.$o))
+#THR_SEQ.objs_a := $(addprefix $(THR.tmpdir_a)/,$(THR.srcs:%.cpp=%_seq.$o))
+#THR_SEQ.objs_y := $(addprefix $(THR.tmpdir_y)/,$(THR.srcs:%.cpp=%_seq.$o))
 -include $(THR.tmpdir_a)/*.d
 -include $(THR.tmpdir_y)/*.d
 
 $(WORKDIR.lib)/$(thr_tbb_a): LOPT :=
 $(WORKDIR.lib)/$(thr_tbb_a): $(THR_TBB.objs_a) ; $(LINK.STATIC)
-$(WORKDIR.lib)/$(thr_seq_a): LOPT :=
-$(WORKDIR.lib)/$(thr_seq_a): $(THR_SEQ.objs_a) ; $(LINK.STATIC)
+#$(WORKDIR.lib)/$(thr_seq_a): LOPT :=
+#$(WORKDIR.lib)/$(thr_seq_a): $(THR_SEQ.objs_a) ; $(LINK.STATIC)
 
 $(WORKDIR.lib)/$(thr_tbb_y): LOPT += $(-fPIC)
 ifdef OS_is_win
@@ -455,46 +454,46 @@ $(WORKDIR.lib)/$(thr_tbb_y): LOPT += $(daaldep.rt) $(daaldep.mkl.thr)
 $(WORKDIR.lib)/$(thr_tbb_y): LOPT += $(if $(OS_is_win),-IMPLIB:$(@:%.dll=%_dll.lib),)
 $(WORKDIR.lib)/$(thr_tbb_y): $(THR_TBB.objs_y) $(if $(OS_is_win),$(THR.tmpdir_y)/dll_tbb.res,) ; $(LINK.DYNAMIC) ; $(LINK.DYNAMIC.POST)
 
-$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(-fPIC)
-ifdef OS_is_win
-$(WORKDIR.lib)/$(thr_seq_y): LOPT += -DEF:$(THR.srcdir)/export.def
-else
-ifdef OS_is_lnx
-ifdef PLAT_is_lnx32e
-$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(addprefix -u ,$(shell grep -v -E '^(EXPORTS|;)' $(THR.srcdir)/export_lnx32e.def))
-else
-$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(addprefix -u ,$(shell grep -v -E '^(EXPORTS|;)' $(THR.srcdir)/export.def))
-endif
-else
-$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(addprefix -u ,$(shell grep -v -E '^(EXPORTS|;)' $(THR.srcdir)/export_mac.def))
-endif
-endif
-$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(daaldep.rt) $(daaldep.mkl.seq)
-$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(if $(OS_is_win),-IMPLIB:$(@:%.dll=%_dll.lib),)
-$(WORKDIR.lib)/$(thr_seq_y): $(THR_SEQ.objs_y) $(if $(OS_is_win),$(THR.tmpdir_y)/dll_seq.res,) ; $(LINK.DYNAMIC) ; $(LINK.DYNAMIC.POST)
+#$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(-fPIC)
+#ifdef OS_is_win
+#$(WORKDIR.lib)/$(thr_seq_y): LOPT += -DEF:$(THR.srcdir)/export.def
+#else
+#ifdef OS_is_lnx
+#ifdef PLAT_is_lnx32e
+#$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(addprefix -u ,$(shell grep -v -E '^(EXPORTS|;)' $(THR.srcdir)/export_lnx32e.def))
+#else
+#$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(addprefix -u ,$(shell grep -v -E '^(EXPORTS|;)' $(THR.srcdir)/export.def))
+#endif
+#else
+#$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(addprefix -u ,$(shell grep -v -E '^(EXPORTS|;)' $(THR.srcdir)/export_mac.def))
+#endif
+#endif
+#$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(daaldep.rt) $(daaldep.mkl.seq)
+#$(WORKDIR.lib)/$(thr_seq_y): LOPT += $(if $(OS_is_win),-IMPLIB:$(@:%.dll=%_dll.lib),)
+#$(WORKDIR.lib)/$(thr_seq_y): $(THR_SEQ.objs_y) $(if $(OS_is_win),$(THR.tmpdir_y)/dll_seq.res,) ; $(LINK.DYNAMIC) ; $(LINK.DYNAMIC.POST)
 
-THR.objs_a := $(THR_TBB.objs_a) $(THR_SEQ.objs_a)
-THR.objs_y := $(THR_TBB.objs_y) $(THR_SEQ.objs_y)
+THR.objs_a := $(THR_TBB.objs_a) #$(THR_SEQ.objs_a)
+THR.objs_y := $(THR_TBB.objs_y) #$(THR_SEQ.objs_y)
 THR_TBB.objs := $(THR_TBB.objs_a) $(THR_TBB.objs_y)
-THR_SEQ.objs := $(THR_SEQ.objs_a) $(THR_SEQ.objs_y)
+#THR_SEQ.objs := $(THR_SEQ.objs_a) $(THR_SEQ.objs_y)
 THR.objs := $(THR.objs_a) $(THR.objs_y)
 
 $(THR.objs): COPT += $(-fPIC) $(-cxx11) $(-Zl) $(-DEBC)
 $(THR.objs): INCLUDES += $(addprefix -I, $(CORE.incdirs))
 $(THR_TBB.objs): COPT += -D__DO_TBB_LAYER__
-$(THR_SEQ.objs): COPT += -D__DO_SEQ_LAYER__
+#$(THR_SEQ.objs): COPT += -D__DO_SEQ_LAYER__
 $(THR.objs_y): COPT += -D__DAAL_IMPLEMENTATION
 
 $(THR_TBB.objs_a): $(THR.tmpdir_a)/%_tbb.$o: $(THR.srcdir)/%.cpp | $(THR.tmpdir_a)/. ; $(C.COMPILE)
 $(THR_TBB.objs_y): $(THR.tmpdir_y)/%_tbb.$o: $(THR.srcdir)/%.cpp | $(THR.tmpdir_y)/. ; $(C.COMPILE)
-$(THR_SEQ.objs_a): $(THR.tmpdir_a)/%_seq.$o: $(THR.srcdir)/%.cpp | $(THR.tmpdir_a)/. ; $(C.COMPILE)
-$(THR_SEQ.objs_y): $(THR.tmpdir_y)/%_seq.$o: $(THR.srcdir)/%.cpp | $(THR.tmpdir_y)/. ; $(C.COMPILE)
+#$(THR_SEQ.objs_a): $(THR.tmpdir_a)/%_seq.$o: $(THR.srcdir)/%.cpp | $(THR.tmpdir_a)/. ; $(C.COMPILE)
+#$(THR_SEQ.objs_y): $(THR.tmpdir_y)/%_seq.$o: $(THR.srcdir)/%.cpp | $(THR.tmpdir_y)/. ; $(C.COMPILE)
 
 $(THR.tmpdir_y)/dll_tbb.res: RCOPT += -D_DAAL_THR_TBB
-$(THR.tmpdir_y)/dll_seq.res: RCOPT += -D_DAAL_THR_SEQ
+#$(THR.tmpdir_y)/dll_seq.res: RCOPT += -D_DAAL_THR_SEQ
 
 $(THR.tmpdir_y)/%_tbb.res: %.rc | $(THR.tmpdir_y)/. ; $(RC.COMPILE)
-$(THR.tmpdir_y)/%_seq.res: %.rc | $(THR.tmpdir_y)/. ; $(RC.COMPILE)
+#$(THR.tmpdir_y)/%_seq.res: %.rc | $(THR.tmpdir_y)/. ; $(RC.COMPILE)
 
 #===============================================================================
 # Interface part
@@ -565,6 +564,8 @@ $(JNI.objs): COPT += $(-fPIC) $(-cxx11) $(-Zl) $(-DEBC) -DDAAL_CHECK_PARAMETER -
 $(JNI.objs): INCLUDES += $(addprefix -I,$(sort $(dir $(JNI.Jheaders))))
 $(JNI.objs): INCLUDES += $(addprefix -I,$(CORE.incdirs.rel) $(CORE.incdirs.common) $(CORE.incdirs.thirdp))
 $(JNI.objs): INCLUDES += $(addprefix -I,$(JNI.srcdir.full)/include)
+$(JNI.objs): INCLUDES += $(addprefix -I,/usr/lib/jvm/java-1.7.0-openjdk-1.7.0.99-2.6.5.0.el7_2.ppc64le/include)
+$(JNI.objs): INCLUDES += $(addprefix -I,/usr/lib/jvm/java-1.7.0-openjdk-1.7.0.99-2.6.5.0.el7_2.ppc64le/include/linux)
 
 $(JNI.objs): $(JNI.tmpdir)/%.$o: $(JNI.srcdir)/%.cpp $(JNI.Jheaders) | $(JNI.tmpdir)/. ; $(C.COMPILE)
 
@@ -588,7 +589,7 @@ _daal_core:  $(WORKDIR.lib)/$(core_a) $(WORKDIR.lib)/$(core_y) ## TODO: move lis
 _daal_thr:   info.building.threading
 _daal_thr:   $(if $(DAALTHRS),$(foreach ithr,$(DAALTHRS),_daal_thr_$(ithr)),)
 _daal_thr_tbb:   $(WORKDIR.lib)/$(thr_tbb_a) $(WORKDIR.lib)/$(thr_tbb_y)
-_daal_thr_seq:   $(WORKDIR.lib)/$(thr_seq_a) $(WORKDIR.lib)/$(thr_seq_y)
+#_daal_thr_seq:   $(WORKDIR.lib)/$(thr_seq_a) $(WORKDIR.lib)/$(thr_seq_y)
 _daal_iface: info.building.interface
 _daal_iface: $(WORKDIR.lib)/$(iface_a) $(WORKDIR.lib)/$(iface_y)
 _daal_jar _daal_jni: info.building.java

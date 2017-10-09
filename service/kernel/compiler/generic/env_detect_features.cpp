@@ -21,7 +21,8 @@
 //--
 */
 
-#include <immintrin.h>
+//felix
+//#include <immintrin.h>
 
 #include "env_detect.h"
 #include "daal_defines.h"
@@ -234,6 +235,8 @@ static int check_ssse3_features()
 
 int __daal_serv_cpu_detect(int enable)
 {
+    // felix
+    /*
     if( check_avx512_features() && (enable & daal::services::Environment::avx512) )
     {
         return daal::avx512;
@@ -263,6 +266,7 @@ int __daal_serv_cpu_detect(int enable)
     {
         return daal::ssse3;
     }
+    */
 
     return daal::sse2;
 }
